@@ -1,12 +1,17 @@
 import puppeteer, { Browser, Page, HTTPRequest } from 'puppeteer';
 import logger from './logger';
-import { USER_AGENT } from './constants';
+import database from './database';
 
 /**
  * Extracts the clientId from the game by launching a headless browser.
  * Prioritizes localStorage for speed.
  */
 export async function getClientId(gameworld: string, cookieString: string): Promise<string | null> {
+	if (!cookieString) {
+		logger.error('No cookies provided for clientId extraction', 'client_id_extractor');
+		return null;
+	}
+
 	let browser: Browser | null = null;
 	try {
 		browser = await puppeteer.launch({
@@ -16,7 +21,8 @@ export async function getClientId(gameworld: string, cookieString: string): Prom
 		}) as any;
 
 		const page: Page = await browser.newPage();
-		await page.setUserAgent(USER_AGENT);
+		const user_agent = database.get('account.user_agent').value();
+		await page.setUserAgent(user_agent);
 
 		const worldUrl = `https://${gameworld}.kingdoms.com`;
 		const cookies = cookieString.split(';').map(pair => {

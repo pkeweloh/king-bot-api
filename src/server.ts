@@ -256,16 +256,18 @@ class server {
 					data: {
 						logzio_enabled: database.get('account.logzio_enabled').value(),
 						logzio_host: database.get('account.logzio_host').value(),
-						logzio_token: database.get('account.logzio_token').value()
+						logzio_token: database.get('account.logzio_token').value(),
+						user_agent: database.get('account.user_agent').value()
 					}
 				};
 			}
 
 			if (action == 'save') {
-				const { logzio_enabled, logzio_host, logzio_token } = req.body;
+				const { logzio_enabled, logzio_host, logzio_token, user_agent } = req.body;
 				database.set('account.logzio_enabled', logzio_enabled).write();
 				database.set('account.logzio_host', logzio_host).write();
 				database.set('account.logzio_token', logzio_token).write();
+				database.set('account.user_agent', user_agent).write();
 				response = { status: 'ok' };
 			}
 
@@ -288,7 +290,7 @@ class server {
 				} = data;
 
 				const response = await inactive_finder.get_inactives(
-					village_id,	min_player_pop, max_player_pop,
+					village_id, min_player_pop, max_player_pop,
 					min_village_pop, max_village_pop,
 					inactive_for, min_distance, max_distance
 				);

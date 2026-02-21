@@ -22,6 +22,10 @@ export function get_date(): number {
 	return Math.floor(Number(Date.now()) / 1000);
 }
 
+export function get_ms(): number {
+	return Date.now();
+}
+
 export function find_state_data(ident: string, data: any[], contains: boolean = false): any {
 	if (!data)
 		return [];
@@ -63,11 +67,11 @@ export function get_diff_time(time: number): number {
  * @returns zip array object
  */
 export function zip(arrays: any[]) {
-	var shortest = arrays.length==0 ? [] : arrays.reduce(function(a,b){
-		return a.length<b.length ? a : b;
+	var shortest = arrays.length == 0 ? [] : arrays.reduce(function (a, b) {
+		return a.length < b.length ? a : b;
 	});
-	return shortest.map(function(_: any,i: string | number) {
-		return arrays.map(function(array) {
+	return shortest.map(function (_: any, i: string | number) {
+		return arrays.map(function (array) {
 			return array[i];
 		});
 	});

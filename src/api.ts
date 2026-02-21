@@ -1,22 +1,38 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import createHttpsProxy from 'https-proxy-agent';
-import { clash_obj, get_date, camelcase_to_string, get_random_string } from './util';
+import { clash_obj, get_date, get_ms, camelcase_to_string, get_random_string, get_random_int } from './util';
 import manage_login from './login';
 import settings, { Icredentials } from './settings';
 import database from './database';
 import { Iresources, Iunits } from './interfaces';
 import { default_Iunits, building_types } from './data';
 import { getClientId } from './client_id_extractor';
-import { USER_AGENT } from './constants';
 import logger from './logger';
+import { SessionManager } from './session_manager';
 
 class api {
 	private ax: AxiosInstance;
+	private sessionManager = new SessionManager();
+
+	private readonly BROWSER_HEADERS = {
+		'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,text/plain,*/*;q=0.8',
+		'Accept-Language': 'es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7',
+		'Accept-Encoding': 'gzip, deflate',
+		'Content-Type': 'application/json;charset=utf-8',
+		'DNT': '1',
+		'Sec-GPC': '1',
+		'Connection': 'keep-alive',
+		'Sec-Fetch-Dest': 'empty',
+		'Sec-Fetch-Mode': 'cors',
+		'Sec-Fetch-Site': 'same-origin',
+		'TE': 'trailers'
+	};
 
 	session: string = '';
 	token: string = '';
 	msid: string = '';
 	clientId: string = '';
+	playerId: string = '';
 	is_busy = false;
 
 	/*
@@ -40,7 +56,14 @@ class api {
 		}
 		this.ax = axios.create(options);
 		this.ax.defaults.withCredentials = true;
-		this.ax.defaults.headers.common['User-Agent'] = USER_AGENT;
+
+		const user_agent = database.get('account.user_agent').value();
+		this.ax.defaults.headers.common['User-Agent'] = user_agent;
+
+		// Set static browser-like headers
+		for (const [key, value] of Object.entries(this.BROWSER_HEADERS)) {
+			this.ax.defaults.headers.common[key] = value;
+		}
 	}
 
 	async test_proxy(): Promise<void> {
@@ -98,13 +121,17 @@ class api {
 		this.clientId = await manage_login(this.ax, email, password, gameworld, sitter_type, sitter_name);
 
 		// assign login credentials
-		const { session_gameworld, token_gameworld, msid } = database.get('account').value();
+		const { session_gameworld, token_gameworld, msid, playerId } = database.get('account').value();
 		this.session = session_gameworld;
 		this.token = token_gameworld;
 		this.msid = msid;
+		this.playerId = playerId || '';
+		this.sessionManager.reset();
 
 		// set base url
 		this.ax.defaults.baseURL = `https://${gameworld.toLowerCase()}.kingdoms.com/api/`;
+		this.ax.defaults.headers.common['Origin'] = `https://${gameworld.toLowerCase()}.kingdoms.com`;
+		this.ax.defaults.headers.common['Referer'] = `https://${gameworld.toLowerCase()}.kingdoms.com/`;
 	}
 
 	async get_all(): Promise<any[]> {
@@ -379,7 +406,27 @@ class api {
 		return await this.post('useItem', 'hero', params);
 	}
 
-	async post(action: string, controller: string, params: object): Promise<any> {
+	async ping(): Promise<any> {
+		const timestamp = get_ms();
+		const params = this.sessionManager.getPingParams(timestamp);
+
+		const response = await this.post('ping', 'player', params, timestamp);
+
+		this.sessionManager.updateFromPingResponse(response?.data);
+
+		return response;
+	}
+
+	/**
+	 * Core method for making POST requests to the Kingdoms API.
+	 * Automatically handles URL parameter construction (&c, &a, &p, &t),
+	 * session/clientId payload wrapping, and browser header mimicry.
+	 * @param action The controller action (e.g., 'upgrade')
+	 * @param controller The controller name (e.g., 'building')
+	 * @param params The action-specific parameters
+	 * @param timestamp Optional override for the &t parameter (useful for synchronized pings)
+	 */
+	async post(action: string, controller: string, params: object, timestamp?: number): Promise<any> {
 		const session = this.session;
 		const clientId = this.clientId;
 		const payload = {
@@ -390,15 +437,23 @@ class api {
 			clientId
 		};
 
-		logger.debug(`post: ${JSON.stringify(params)}`, `${controller}.${action}`);
+		const isPing = action === 'ping' && controller === 'player';
+		const finalTimestamp = timestamp || get_ms();
+		const url = `?c=${controller}&a=${action}${this.playerId ? `&p${this.playerId}` : ''}&t${finalTimestamp}`;
 
-		let response: any = await this.ax.post(`?c=${controller}&a=${action}&t${get_date()}`, payload);
+		logger.debug(`post /${url}: ${JSON.stringify(params)}`, `${controller}.${action}`);
+
+		let response: any = await this.ax.post(url, payload);
+
+		// Update session state for future pings
+		this.sessionManager.registerInteraction(finalTimestamp, !isPing);
+
 		if (response.data?.error?.type == 'ClientException' &&
 			response.data?.error?.message == 'Authentication failed') {
 			logger.error('authentication failed, refreshing token and retrying... ', `${controller}.${action}`);
 			await this.refresh_token();
 			// retry
-			response = await this.ax.post(`?c=${controller}&a=${action}&t${get_date()}`, payload);
+			response = await this.ax.post(url, payload);
 		}
 		if (!response)
 			return {

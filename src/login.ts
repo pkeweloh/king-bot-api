@@ -71,15 +71,16 @@ async function manage_login(
 		}
 	}
 
-	const cookies = axios.defaults.headers.common['Cookie'];
+	let cookies = axios.defaults.headers.common['Cookie'];
 
 	// login if not recovered
 	if (!cookies) {
 		const { msid, session_lobby } = await login_to_lobby(axios, email, password);
 		await login_to_gameworld(axios, gameworld, sitter_type, sitter_name, msid, session_lobby);
+		cookies = axios.defaults.headers.common['Cookie'];
 	}
 
-	// get clientId	
+	// get clientId
 	clientId = await getClientId(gameworld, cookies);
 	if (!clientId) {
 		logger.error('could not resolve clientId. authentication aborted.', 'login');
@@ -113,11 +114,20 @@ async function login_to_lobby(axios: AxiosInstance, email: string, password: str
 		}
 	}
 
-	let startIndex: number = html.indexOf('msid');
-	let endIndex: number = html.indexOf('{}', startIndex);
-	msid = html.substring(startIndex, endIndex);
+	const msidMatch = html.match(/msid["']?\s*[:=,]\s*["']?([a-zA-Z0-9.\-_]+)["']?/i);
+	msid = msidMatch ? msidMatch[1] : '';
 
-	msid = msid.substring(msid.indexOf(',') + 3, msid.lastIndexOf('"'));
+	if (!msid) {
+		// Fallback to more permissive search if the structured one fails
+		const rawMatch = html.match(/msid.*?([a-zA-Z0-9]{10,})/i);
+		msid = rawMatch ? rawMatch[1] : '';
+	}
+
+	if (!msid) {
+		logger.error('failed to extract a valid msid. Response data: ' + html.substring(0, 200), 'login');
+		process.exit();
+	}
+
 	logger.info('msid: ' + msid, 'login');
 
 	// logs in with credentials from file
@@ -180,6 +190,10 @@ async function login_to_lobby(axios: AxiosInstance, email: string, password: str
 	axios.defaults.headers.common['Cookie'] = cookies_lobby;
 
 	let sessionLink: string = cookies.headers.location;
+	if (!sessionLink || sessionLink.indexOf('=') === -1) {
+		logger.error('failed to extract session link from lobby login response', 'login');
+		process.exit();
+	}
 	session_lobby = sessionLink.substring(sessionLink.lastIndexOf('=') + 1);
 	logger.info('lobby sessionID: ' + session_lobby, 'login');
 
@@ -256,8 +270,20 @@ async function login_to_gameworld(
 	let cookies_gameworld = parse_cookies(res.headers['set-cookie']);
 	axios.defaults.headers.common['Cookie'] += cookies_gameworld;
 
+	// Extract playerId from t5SessionKey cookie if present
+	let playerId = '';
+	const t5match = cookies_gameworld.match(/t5SessionKey=[^;]*%22id%22%3A%22(\d+)%22/);
+	if (t5match) {
+		playerId = t5match[1];
+		logger.debug(`Extracted playerId from cookie: ${playerId}`, 'login');
+	}
+
 	// get new sessionID
 	let sessionLink = res.headers.location;
+	if (!sessionLink || sessionLink.indexOf('=') === -1) {
+		logger.error('failed to extract session link from gameworld login response', 'login');
+		process.exit();
+	}
 	session_gameworld = sessionLink.substring(sessionLink.lastIndexOf('=') + 1);
 	logger.info('gameworld sessionID: ' + session_gameworld, 'login');
 
@@ -272,6 +298,7 @@ async function login_to_gameworld(
 	database.set('account.session_gameworld', session_gameworld).write();
 	database.set('account.cookies_gameworld', cookies_gameworld).write();
 	database.set('account.gameworld', gameworld).write();
+	database.set('account.playerId', playerId).write();
 	database.set('account.sitter_type', sitter_type).write();
 	database.set('account.sitter_name', sitter_name).write();
 	database.set('account.avatar_name', avatar_name).write();
@@ -282,16 +309,18 @@ async function login_to_gameworld(
 	return { session_gameworld, token_gameworld, cookies_gameworld };
 }
 
-function parse_token(raw_html: string): object {
-	let $ = ci.load(raw_html);
+function parse_token(raw_html: string): any {
+	const html = String(raw_html);
 
-	let html: string = $.html();
-	let urlIndex: number = html.indexOf('url:');
-	let urlEndIndex: number = html.indexOf('}', urlIndex);
+	const urlMatch = html.match(/url\s*:\s*['"]([^'"]+)['"]/);
+	const tokenURL = urlMatch ? urlMatch[1] : '';
 
-	let tokenURL: string = html.substring(urlIndex, urlEndIndex);
-	tokenURL = tokenURL.substring(tokenURL.indexOf('\'') + 1, tokenURL.lastIndexOf('\''));
-	let token: string = tokenURL.substring(tokenURL.indexOf('token=') + 'token='.length, tokenURL.indexOf('&', tokenURL.indexOf('token')));
+	const tokenMatch = tokenURL.match(/token=([^&]+)/);
+	const token = tokenMatch ? tokenMatch[1] : '';
+
+	if (!token || !tokenURL) {
+		logger.error('failed to parse token from response. Data snippet: ' + html.substring(0, 100), 'login');
+	}
 
 	return { url: tokenURL, token };
 }
@@ -426,7 +455,16 @@ async function test_gameworld_connection(axios: AxiosInstance, gameworld: string
 	try {
 		const gameworld_endpoint = `https://${gameworld}.kingdoms.com/api/?c=cache&a=get&t${Date.now()}`;
 		const response = await axios.post(gameworld_endpoint, payload);
-		return !response.data.error;
+		if (response.data && !response.data.error) {
+			const data = clash_obj(response.data, 'cache', 'response');
+			const player = data.find((x: any) => x.name === 'Player:');
+			if (player && player.data && player.data.playerId) {
+				database.set('account.playerId', player.data.playerId).write();
+				logger.info(`Validated playerId from cache: ${player.data.playerId}`, 'login');
+			}
+			return true;
+		}
+		return false;
 	} catch { return false; }
 }
 
