@@ -16,7 +16,7 @@ class improve_troops extends feature_collection {
 		return 'improve_troops';
 	}
 
-	get_new_item(options: Ioptions_improve_troops): train_feature {
+	get_new_item(options: Ioptions): train_feature {
 		return new train_feature({ ...options });
 	}
 
@@ -65,7 +65,7 @@ class train_feature extends feature_item {
 			const { village_name, unit_type_name, level } = unit;
 			if (description != '')
 				description += '\n';
-			description += `${village_name} -> ${unit_type_name} (${level == -1 ? 'max' : level })`;
+			description += `${village_name} -> ${unit_type_name} (${level == -1 ? 'max' : level})`;
 		}
 		return description;
 	}
@@ -75,33 +75,24 @@ class train_feature extends feature_item {
 		return 'improve_troops';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const { units } = this.options;
-			if (units.length == 0) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-
-			let sleep_time: number = await this.improve_troops();
-
-			// improving done or error raised
-			if (!sleep_time)
-				break;
-
-			await sleep(sleep_time);
+	async run(): Promise<number | null> {
+		const { units } = this.options;
+		if (units.length == 0) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		let sleep_time: number = await this.improve_troops();
+
+		// improving done or error raised
+		if (!sleep_time) return null;
+
+		return sleep_time;
 	}
 
 	async improve_troops(): Promise<number> {
-		const {	units } = this.options;
+		const { units } = this.options;
 
 		let sleep_time: number = 3600;
 		const building_type: number = 13; // smithy building type
@@ -254,11 +245,11 @@ class train_feature extends feature_item {
 						if (research_unit.errors) {
 							for (let error of research_unit.errors)
 								logger.error(`improving unit type ${unit_type_name} to level ${next_level} ` +
-								`in village ${village_name} failed: ${error.message}`, this.params.name);
+									`in village ${village_name} failed: ${error.message}`, this.params.name);
 							continue;
 						}
 						logger.info(
-							`improving unit type ${unit_type_name} to level ${next_level} in village ${village_name} `+
+							`improving unit type ${unit_type_name} to level ${next_level} in village ${village_name} ` +
 							`with a cost of wood: ${unit_data.costs[1]}, clay: ${unit_data.costs[2]}, iron: ${unit_data.costs[3]}`,
 							this.params.name);
 

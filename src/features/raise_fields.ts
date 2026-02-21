@@ -22,7 +22,7 @@ class raise_fields extends feature_collection {
 		return 'raise_fields';
 	}
 
-	get_new_item(options: Ioptions_raise): raise {
+	get_new_item(options: Ioptions): raise {
 		return new raise({ ...options });
 	}
 
@@ -97,33 +97,24 @@ class raise extends feature_item {
 		return 'raise_fields';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const { village_id } = this.options;
-			if (!village_id) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-
-			let sleep_time: number = await this.upgrade_field();
-
-			// all fields are raised or error raised
-			if (!sleep_time)
-				break;
-
-			// set save sleep time
-			if (sleep_time > 300)
-				sleep_time = 300;
-
-			await sleep(sleep_time);
+	async run(): Promise<number | null> {
+		const { village_id } = this.options;
+		if (!village_id) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		let sleep_time: number = await this.upgrade_field();
+
+		// all fields are raised or error raised
+		if (!sleep_time) return null;
+
+		// set save sleep time
+		if (sleep_time > 300) sleep_time = 300;
+		if (sleep_time < 0) sleep_time = 60;
+
+		return sleep_time;
 	}
 
 	async upgrade_field(): Promise<number> {

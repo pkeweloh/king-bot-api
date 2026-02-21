@@ -1,7 +1,8 @@
 import database from '../database';
 import uniqid from 'uniqid';
 import logger from '../logger';
-import { list_remove } from '../util';
+import { list_remove, get_date } from '../util';
+import scheduler, { ITask } from '../scheduler';
 
 export interface Ifeature_params extends Ifeature, Ioptions {
 	description?: string
@@ -50,7 +51,7 @@ export abstract class feature_single implements feature {
 	abstract get_description(): string;
 
 	abstract update(options: Ioptions): Iresponse;
-	abstract run(): Promise<void>;
+	abstract run(): Promise<number | null>; // Returns next delay in seconds
 
 	constructor() {
 		this.set_params();
@@ -91,23 +92,24 @@ export abstract class feature_single implements feature {
 		this.set_options({ ...this.get_options(), run: true });
 		this.save();
 
-		try {
-			this.running = true;
-			await this.run();
-			this.save();
-		} catch (error:any) {
-			logger.error(error.message, this.params.name);
-			if (error.stack)
-				logger.debug(error.stack, this.params.name);
+		this.running = true;
 
-			// restart
-			this.set_options({ ...this.get_options(), run: true, error: true });
-			this.running = true;
-			this.save();
-			logger.warn(`uuid: ${this.get_options().uuid} failed, restarting...`, this.params.name);
-			await this.run();
-			this.save();
-		}
+		const task: ITask = {
+			id: this.params.ident,
+			name: this.params.name,
+			nextRun: get_date(),
+			run: async () => {
+				if (!this.get_options().run) {
+					this.running = false;
+					return null;
+				}
+				const nextDelay = await this.run();
+				return nextDelay || 60; // Default to 1 minute if null or 0 returned but still running
+			}
+		};
+
+		scheduler.scheduleTask(task);
+		logger.info(`Task: ${task.id} started`, task.name);
 	}
 
 	save(): void {
@@ -133,6 +135,8 @@ export abstract class feature_single implements feature {
 
 		if (action == 'stop') {
 			this.stop();
+			scheduler.removeTask(this.params.ident);
+			logger.info(`Task: ${this.params.ident} stopped`, this.params.name);
 
 			res.message = 'offline';
 			return res;
@@ -232,7 +236,7 @@ export abstract class feature_collection implements feature {
 
 		if (!feature) {
 			res.error = true;
-			res.message = `feature with uuid: ${ uuid } not found !`;
+			res.message = `feature with uuid: ${uuid} not found !`;
 
 			return res;
 		}
@@ -311,7 +315,7 @@ export abstract class feature_item {
 	running: boolean = false;
 	params: Ifeature;
 
-	abstract run(): Promise<void>;
+	abstract run(): Promise<number | null>;
 	abstract get_options(): Ioptions;
 	abstract set_options(options: Ioptions): void;
 	abstract set_params(): void;
@@ -338,6 +342,8 @@ export abstract class feature_item {
 
 	stop(): void {
 		this.set_options({ ...this.get_options(), run: false });
+		scheduler.removeTask(this.get_options().uuid);
+		logger.info(`Task: ${this.params.ident} stopped`, this.params.name);
 	}
 
 	save(): void {
@@ -355,24 +361,24 @@ export abstract class feature_item {
 
 	async start(): Promise<void> {
 		this.set_options({ ...this.get_options(), run: true });
+		this.running = true;
+		this.save();
 
-		try {
-			this.running = true;
-			this.save();
-			await this.run();
-			this.save();
-		} catch (error:any) {
-			logger.error(error.message, this.params.name);
-			if (error.stack)
-				logger.debug(error.stack, this.params.name);
+		const task: ITask = {
+			id: this.get_options().uuid,
+			name: this.params.name,
+			nextRun: get_date(),
+			run: async () => {
+				if (!this.get_options().run) {
+					this.running = false;
+					return null;
+				}
+				const nextDelay = await this.run();
+				return nextDelay || 60;
+			}
+		};
 
-			// restart
-			this.set_options({ ...this.get_options(), run: true, error: true });
-			this.running = true;
-			this.save();
-			logger.warn(`uuid: ${this.get_options().uuid} failed, restarting...`, this.params.name);
-			await this.run();
-			this.save();
-		}
+		scheduler.scheduleTask(task);
+		logger.info(`Task: ${task.id} started`, task.name);
 	}
 }

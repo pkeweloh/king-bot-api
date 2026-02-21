@@ -17,7 +17,7 @@ class stolen_goods extends feature_collection {
 		return 'stolen_goods';
 	}
 
-	get_new_item(options: Ioptions_stolen_goods): stolen_goods_feature {
+	get_new_item(options: Ioptions): stolen_goods_feature {
 		return new stolen_goods_feature({ ...options });
 	}
 
@@ -84,27 +84,20 @@ class stolen_goods_feature extends feature_item {
 		return 'stolen_goods';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const {	villages, interval_min, interval_max } = this.options;
-			if (villages.length == 0) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-			await this.sell_stolen_goods();
-			await sleep(get_random_int(interval_min, interval_max));
+	async run(): Promise<number | null> {
+		const { villages, interval_min, interval_max } = this.options;
+		if (villages.length == 0) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		await this.sell_stolen_goods();
+		return get_random_int(interval_min, interval_max);
 	}
 
 	async sell_stolen_goods(): Promise<void> {
-		const {	villages } = this.options;
+		const { villages } = this.options;
 
 		for (let item of villages) {
 			const { village_id, village_name } = item;
@@ -195,7 +188,7 @@ class stolen_goods_feature extends feature_item {
 			}
 			const reward = sell_treasures.resources;
 			logger.info(
-				`selling ${sell_treasures.amount} stolen goods in village ${village_name} `+
+				`selling ${sell_treasures.amount} stolen goods in village ${village_name} ` +
 				`with a reward of wood: ${reward[1]}, clay: ${reward[2]}, iron: ${reward[3]}, crop: ${reward[4]}`,
 				this.params.name);
 		}

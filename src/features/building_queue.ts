@@ -49,7 +49,7 @@ class queue extends feature_item {
 			error,
 			village_name,
 			village_id,
-			queue: [ ...queue ]
+			queue: [...queue]
 		};
 	}
 
@@ -78,33 +78,26 @@ class queue extends feature_item {
 		return 'queue';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const { village_id } = this.options;
-			if (!village_id) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-
-			let sleep_time: number = await this.upgrade_queue();
-
-			// queue done or error raised
-			if (!sleep_time)
-				break;
-
-			// set save sleep time
-			if (sleep_time > 300)
-				sleep_time = 300;
-
-			await sleep(sleep_time);
+	async run(): Promise<number | null> {
+		const { village_id } = this.options;
+		if (!village_id) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			this.options.run = false;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		let sleep_time: number = await this.upgrade_queue();
+
+		// queue done or error raised
+		if (!sleep_time)
+			return null;
+
+		// set save sleep time
+		if (sleep_time > 300)
+			sleep_time = 300;
+
+		return sleep_time;
 	}
 
 	async upgrade_queue(): Promise<number> {

@@ -35,32 +35,32 @@
  *    } );
  */
 
-(function( factory ){
-	if ( typeof define === 'function' && define.amd ) {
+(function (factory) {
+	if (typeof define === 'function' && define.amd) {
 		// AMD
-		define( ['jquery', 'datatables.net'], function ( $ ) {
-			return factory( $, window, document );
-		} );
+		define(['jquery', 'datatables.net'], function ($) {
+			return factory($, window, document);
+		});
 	}
-	else if ( typeof exports === 'object' ) {
+	else if (typeof exports === 'object') {
 		// CommonJS
 		module.exports = function (root, $) {
-			if ( ! root ) {
+			if (!root) {
 				root = window;
 			}
 
-			if ( ! $ || ! $.fn.dataTable ) {
+			if (!$ || !$.fn.dataTable) {
 				$ = require('datatables.net')(root, $).$;
 			}
 
-			return factory( $, root, root.document );
+			return factory($, root, root.document);
 		};
 	}
 	else {
 		// Browser
-		factory( jQuery, window, document );
+		factory(jQuery, window, document);
 	}
-}(function( $, window, document, undefined ) {
+}(function ($, window, document) {
 	'use strict';
 
 	// Unique value allowing multiple absolute ordering use cases on a single page.
@@ -68,13 +68,13 @@
 
 	// Function to encapsulate code that is common to both the string and number
 	// ordering plug-ins.
-	var _setup = function ( values ) {
-		if ( ! Array.isArray( values ) ) {
-			values = [ values ];
+	var _setup = function (values) {
+		if (!Array.isArray(values)) {
+			values = [values];
 		}
 
 		var o = {
-			name: 'absoluteOrder'+(_unique++),
+			name: 'absoluteOrder' + (_unique++),
 			alwaysTop: {},
 			alwaysBottom: {}
 		};
@@ -82,41 +82,41 @@
 		// In order to provide performance, the symbols that are to be looked for
 		// are stored as parameter keys in an object, allowing O(1) lookup, rather
 		// than O(n) if it were in an array.
-		for ( var i=0, ien=values.length ; i<ien ; i++ ) {
+		for (var i = 0, ien = values.length; i < ien; i++) {
 			var conf = values[i];
 
-			if ( typeof conf === 'string' ) {
-				o.alwaysTop[ conf ] = true;
+			if (typeof conf === 'string') {
+				o.alwaysTop[conf] = true;
 			}
-			else if ( conf.position === undefined || conf.position === 'top' ) {
-				o.alwaysTop[ conf.value ] = true;
+			else if (conf.position === undefined || conf.position === 'top') {
+				o.alwaysTop[conf.value] = true;
 			}
 			else {
-				o.alwaysBottom[ conf.value ] = true;
+				o.alwaysBottom[conf.value] = true;
 			}
 		}
 
 		// Ascending ordering method
-		o.asc = function ( a, b, isNumber ) {
-			if ( o.alwaysTop[ a ] && o.alwaysTop[ b ] ) {
+		o.asc = function (a, b, isNumber) {
+			if (o.alwaysTop[a] && o.alwaysTop[b]) {
 				return 0;
 			}
-			else if ( o.alwaysBottom[ a ] && o.alwaysBottom[ b ] ) {
+			else if (o.alwaysBottom[a] && o.alwaysBottom[b]) {
 				return 0;
 			}
-			else if ( o.alwaysTop[ a ] || o.alwaysBottom[ b ] ) {
+			else if (o.alwaysTop[a] || o.alwaysBottom[b]) {
 				return -1;
 			}
-			else if ( o.alwaysBottom[ a ] || o.alwaysTop[ b ] ) {
+			else if (o.alwaysBottom[a] || o.alwaysTop[b]) {
 				return 1;
 			}
 
-			if ( isNumber ) {
-			// Cast as a number if required
-				if ( typeof a === 'string' ) {
+			if (isNumber) {
+				// Cast as a number if required
+				if (typeof a === 'string') {
 					a = a.replace(/[^\d\-.]/g, '') * 1;
 				}
-				if ( typeof b === 'string' ) {
+				if (typeof b === 'string') {
 					b = b.replace(/[^\d\-.]/g, '') * 1;
 				}
 			}
@@ -125,25 +125,25 @@
 		};
 
 		// Descending ordering method
-		o.desc = function ( a, b, isNumber ) {
-			if ( o.alwaysTop[ a ] && o.alwaysTop[ b ] ) {
+		o.desc = function (a, b, isNumber) {
+			if (o.alwaysTop[a] && o.alwaysTop[b]) {
 				return 0;
 			}
-			else if ( o.alwaysBottom[ a ] && o.alwaysBottom[ b ] ) {
+			else if (o.alwaysBottom[a] && o.alwaysBottom[b]) {
 				return 0;
 			}
-			else if ( o.alwaysTop[ a ] || o.alwaysBottom[ b ] ) {
+			else if (o.alwaysTop[a] || o.alwaysBottom[b]) {
 				return -1;
 			}
-			else if ( o.alwaysBottom[ a ] || o.alwaysTop[ b ] ) {
+			else if (o.alwaysBottom[a] || o.alwaysTop[b]) {
 				return 1;
 			}
 
-			if ( isNumber ) {
-				if ( typeof a === 'string' ) {
+			if (isNumber) {
+				if (typeof a === 'string') {
 					a = a.replace(/[^\d\-.]/g, '') * 1;
 				}
-				if ( typeof b === 'string' ) {
+				if (typeof b === 'string') {
 					b = b.replace(/[^\d\-.]/g, '') * 1;
 				}
 			}
@@ -155,11 +155,11 @@
 	};
 
 	// String based ordering
-	$.fn.dataTable.absoluteOrder = function ( values ) {
-		var conf = _setup( values );
+	$.fn.dataTable.absoluteOrder = function (values) {
+		var conf = _setup(values);
 
-		$.fn.dataTable.ext.type.order[ conf.name+'-asc' ] = conf.asc;
-		$.fn.dataTable.ext.type.order[ conf.name+'-desc' ] = conf.desc;
+		$.fn.dataTable.ext.type.order[conf.name + '-asc'] = conf.asc;
+		$.fn.dataTable.ext.type.order[conf.name + '-desc'] = conf.desc;
 
 		// Return the name of the sorting plug-in that was created so it can be used
 		// with the `columns.type` parameter. There is no auto-detection here.
@@ -167,14 +167,14 @@
 	};
 
 	// Number based ordering - strips out everything but the number information
-	$.fn.dataTable.absoluteOrderNumber = function ( values ) {
-		var conf = _setup( values );
+	$.fn.dataTable.absoluteOrderNumber = function (values) {
+		var conf = _setup(values);
 
-		$.fn.dataTable.ext.type.order[ conf.name+'-asc' ] = function ( a, b ) {
-			return conf.asc( a, b, true );
+		$.fn.dataTable.ext.type.order[conf.name + '-asc'] = function (a, b) {
+			return conf.asc(a, b, true);
 		};
-		$.fn.dataTable.ext.type.order[ conf.name+'-desc' ] = function ( a, b ) {
-			return conf.desc( a, b, true );
+		$.fn.dataTable.ext.type.order[conf.name + '-desc'] = function (a, b) {
+			return conf.desc(a, b, true);
 		};
 
 		return conf.name;

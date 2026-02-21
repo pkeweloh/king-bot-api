@@ -17,7 +17,7 @@ class send_farmlist extends feature_collection {
 		return 'farming';
 	}
 
-	get_new_item(options: Ioptions_farm): farm_feature {
+	get_new_item(options: Ioptions): farm_feature {
 		return new farm_feature({ ...options });
 	}
 
@@ -81,82 +81,69 @@ class farm_feature extends feature_item {
 		return 'farming';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
+	async run(): Promise<number | null> {
+		const { interval_min, interval_max, farmlists, losses_farmlist } = this.options;
 
-		const params = [
-			village.collection_own_ident,
-			farming.farmlist_ident,
-		];
-
-		// fetch farmlists
-		const response = await api.get_cache(params);
-
-		while (this.options.run) {
-			const { interval_min, interval_max, farmlists, losses_farmlist } = this.options;
-
-			if (!interval_min) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-
-			if (farmlists.length == 0) {
-				logger.error('stop feature because farmlist is empty', this.params.name);
-				this.options.error = true;
-				break;
-			}
-
-			const farmlists_to_send: any = {};
-
-			for (let farmlistinfo of farmlists) {
-				const list_obj = farming.find(farmlistinfo.farmlist, response);
-				if (!list_obj) {
-					logger.error('stop feature because farmlist can not be found', this.params.name);
-					this.options.run = false;
-					this.options.error = true;
-					break;
-				}
-				const village_id: number = farmlistinfo.village_id;
-
-				const lastSent: number = Number(list_obj.lastSent);
-				const now: number = get_date();
-
-				if ((now - lastSent) < interval_min) {
-					logger.info(`farmlist: ${farmlistinfo.farmlist} sent too recently. skipping until next time`, this.params.name);
-					continue;
-				}
-
-				// cleaning was desired
-				if (losses_farmlist != '') {
-					const losses_list_obj = farming.find(losses_farmlist, response);
-					const losses_id = losses_list_obj.listId;
-					await clean_farmlist(list_obj.listId, losses_id);
-				}
-
-				// add the list.
-				if (!farmlists_to_send[village_id])
-					farmlists_to_send[village_id] = [];
-				farmlists_to_send[village_id].push(list_obj.listId);
-			}
-
-			if (Object.keys(farmlists_to_send).length > 0) {
-				for (var village_id in farmlists_to_send) {
-					if (Object.prototype.hasOwnProperty.call(farmlists_to_send, village_id)) {
-						var farmlist_ids = farmlists_to_send[village_id];
-						await api.send_farmlists(farmlist_ids, Number(village_id));
-						await sleep(get_random_int(.75, 1.25));
-					}
-				}
-				logger.info('farmlists sent', this.params.name);
-			}
-
-			await sleep(get_random_int(interval_min, interval_max));
+		if (!interval_min) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		if (farmlists.length == 0) {
+			logger.error('stop feature because farmlist is empty', this.params.name);
+			this.options.error = true;
+			return null;
+		}
+
+		const params = [village.collection_own_ident, farming.farmlist_ident];
+		const response = await api.get_cache(params);
+
+		const farmlists_to_send: any = {};
+
+		for (let farmlistinfo of farmlists) {
+			const list_obj = farming.find(farmlistinfo.farmlist, response);
+			if (!list_obj) {
+				logger.error('stop feature because farmlist can not be found', this.params.name);
+				this.options.run = false;
+				this.options.error = true;
+				return null;
+			}
+			const village_id: number = farmlistinfo.village_id;
+
+			const lastSent: number = Number(list_obj.lastSent);
+			const now: number = get_date();
+
+			if ((now - lastSent) < interval_min) {
+				logger.info(`farmlist: ${farmlistinfo.farmlist} sent too recently. skipping until next time`, this.params.name);
+				continue;
+			}
+
+			// cleaning was desired
+			if (losses_farmlist != '') {
+				const losses_list_obj = farming.find(losses_farmlist, response);
+				const losses_id = losses_list_obj.listId;
+				await clean_farmlist(list_obj.listId, losses_id);
+			}
+
+			// add the list.
+			if (!farmlists_to_send[village_id])
+				farmlists_to_send[village_id] = [];
+			farmlists_to_send[village_id].push(list_obj.listId);
+		}
+
+		if (Object.keys(farmlists_to_send).length > 0) {
+			for (var village_id in farmlists_to_send) {
+				if (Object.prototype.hasOwnProperty.call(farmlists_to_send, village_id)) {
+					var farmlist_ids = farmlists_to_send[village_id];
+					await api.send_farmlists(farmlist_ids, Number(village_id));
+					await sleep(get_random_int(.75, 1.25));
+				}
+			}
+			logger.info('farmlists sent', this.params.name);
+		}
+
+		return get_random_int(interval_min, interval_max);
 	}
 }
 

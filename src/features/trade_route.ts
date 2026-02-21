@@ -32,7 +32,7 @@ class trade_route extends feature_collection {
 		return 'trade_route';
 	}
 
-	get_new_item(options: Ioptions_trade): trade_feature {
+	get_new_item(options: Ioptions): trade_feature {
 		return new trade_feature({ ...options });
 	}
 
@@ -150,25 +150,18 @@ class trade_feature extends feature_item {
 		return true;
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const { source_village_id, destination_village_id, destination_village_own } = this.options;
-			if (!source_village_id || !destination_village_id) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-			if (destination_village_own)
-				await this.trade_own_route();
-			else
-				await this.trade_external_route();
+	async run(): Promise<number | null> {
+		const { source_village_id, destination_village_id, destination_village_own, interval_min, interval_max } = this.options;
+		if (!source_village_id || !destination_village_id) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		if (destination_village_own) await this.trade_own_route();
+		else await this.trade_external_route();
+
+		return get_random_int(interval_min, interval_max);
 	}
 
 	async trade_own_route(): Promise<void> {
@@ -204,7 +197,7 @@ class trade_feature extends feature_item {
 			return;
 		}
 
-		var resources: Iresources = { 1:0, 2:0, 3:0, 4:0 };
+		var resources: Iresources = { 1: 0, 2: 0, 3: 0, 4: 0 };
 		resources[1] = Math.floor(Math.min(send_wood, source_village.storage['1']));
 		resources[2] = Math.floor(Math.min(send_clay, source_village.storage['2']));
 		resources[3] = Math.floor(Math.min(send_iron, source_village.storage['3']));
@@ -259,7 +252,7 @@ class trade_feature extends feature_item {
 			return;
 		}
 
-		var resources: Iresources = { 1:0, 2:0, 3:0, 4:0 };
+		var resources: Iresources = { 1: 0, 2: 0, 3: 0, 4: 0 };
 		resources[1] = Math.floor(Math.min(send_wood, source_village.storage['1']));
 		resources[2] = Math.floor(Math.min(send_clay, source_village.storage['2']));
 		resources[3] = Math.floor(Math.min(send_iron, source_village.storage['3']));

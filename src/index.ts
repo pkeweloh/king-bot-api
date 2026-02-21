@@ -4,6 +4,7 @@ import { Iunits, Iplayer } from './interfaces';
 import { tribe } from './data';
 import server from './server';
 import logger from './logger';
+import scheduler from './scheduler';
 
 import { farming, village, player } from './gamedata';
 
@@ -21,6 +22,7 @@ class kingbot {
 		await this.login(gameworld, email, password, sitter_type, sitter_name, proxy);
 
 		server.start(port);
+		scheduler.start();
 	}
 
 	async login(

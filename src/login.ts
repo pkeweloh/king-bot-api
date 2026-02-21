@@ -5,6 +5,7 @@ import { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { clash_obj } from './util';
 import database from './database';
 import settings from './settings';
+import { getClientId } from './client_id_extractor';
 
 const ci = cheerio;
 const lobby_endpoint: string = 'https://lobby.kingdoms.com/api/index.php';
@@ -16,7 +17,7 @@ async function manage_login(
 	gameworld: string,
 	sitter_type: string,
 	sitter_name: string
-): Promise<any> {
+): Promise<string> {
 
 	// get account from database
 	const db_email = database.get('account.email').value();
@@ -37,6 +38,8 @@ async function manage_login(
 	settings.sitter_type = sitter_type;
 	settings.avatar_name = db_avatar_name;
 
+	let clientId = '';
+
 	if (db_email === email) {
 		logger.info('found lobby session in database...', 'login');
 
@@ -49,28 +52,41 @@ async function manage_login(
 			logger.info(`successful database reconnection to lobby with account ${email}`, 'login');
 
 			if (db_gameworld === gameworld && db_sitter_name === sitter_name && db_sitter_type === sitter_type) {
-				logger.info('found gameworld session in database...', 'login');
-
 				// get credentials from database
 				const { session_gameworld, cookies_gameworld } = database.get('account').value();
+
+				logger.info(`found gameworld session in database: ${session_gameworld}`, 'login');
 
 				axios.defaults.headers.common['Cookie'] += cookies_gameworld;
 				if (await test_gameworld_connection(axios, gameworld, session_gameworld)) {
 					logger.info(`successful database reconnection to gameworld ${gameworld}`, 'login');
-					return;
 				} else {
 					logger.warn(`database connection to gameworld ${gameworld} failed`, 'login');
+					axios.defaults.headers.common['Cookie'] = '';
 				}
 			}
 		} else {
 			logger.warn(`database connection to lobby with account ${email} failed`, 'login');
+			axios.defaults.headers.common['Cookie'] = '';
 		}
 	}
 
-	// login
-	const { msid, session_lobby } = await login_to_lobby(axios, email, password);
-	await login_to_gameworld(axios, gameworld, sitter_type, sitter_name, msid, session_lobby);
-	return;
+	const cookies = axios.defaults.headers.common['Cookie'];
+
+	// login if not recovered
+	if (!cookies) {
+		const { msid, session_lobby } = await login_to_lobby(axios, email, password);
+		await login_to_gameworld(axios, gameworld, sitter_type, sitter_name, msid, session_lobby);
+	}
+
+	// get clientId	
+	clientId = await getClientId(gameworld, cookies);
+	if (!clientId) {
+		logger.error('could not resolve clientId. authentication aborted.', 'login');
+		process.exit();
+	}
+
+	return clientId;
 }
 
 async function login_to_lobby(axios: AxiosInstance, email: string, password: string): Promise<any> {
@@ -281,15 +297,11 @@ function parse_token(raw_html: string): object {
 }
 
 function parse_cookies(cookie_array: any[]): string {
-	let cookie_string: string = '';
-	cookie_array.forEach(x => {
-		let uri = x.substring(0, x.indexOf(';') + 2);
-		uri = uri.replace(new RegExp('%3A', 'g'), ':');
-		uri = uri.replace(new RegExp('%2C', 'g'), ',');
-		cookie_string += decodeURI(uri);
-	});
-
-	return cookie_string;
+	if (!cookie_array) return '';
+	return cookie_array.map(x => {
+		const part = x.split(';')[0];
+		return part;
+	}).join('; ') + '; ';
 }
 
 function validate_cookie_status(status: number): boolean {

@@ -5,7 +5,9 @@ import manage_login from './login';
 import settings, { Icredentials } from './settings';
 import database from './database';
 import { Iresources, Iunits } from './interfaces';
-import { default_Iunits } from './data';
+import { default_Iunits, building_types } from './data';
+import { getClientId } from './client_id_extractor';
+import { USER_AGENT } from './constants';
 import logger from './logger';
 
 class api {
@@ -14,6 +16,7 @@ class api {
 	session: string = '';
 	token: string = '';
 	msid: string = '';
+	clientId: string = '';
 	is_busy = false;
 
 	/*
@@ -37,7 +40,7 @@ class api {
 		}
 		this.ax = axios.create(options);
 		this.ax.defaults.withCredentials = true;
-		this.ax.defaults.headers.common['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36';
+		this.ax.defaults.headers.common['User-Agent'] = USER_AGENT;
 	}
 
 	async test_proxy(): Promise<void> {
@@ -57,7 +60,7 @@ class api {
 				if (https_ip == settings.ip)
 					logger.warn('the ip address for https protocol has not changed', 'api');
 			}
-		} catch (error:any) {
+		} catch (error: any) {
 			logger.error(`proxy test fail: ${error.message}`, 'api');
 			if (error.stack)
 				logger.debug(error.stack, 'api');
@@ -92,7 +95,7 @@ class api {
 
 	async login(email: string, password: string, gameworld: string, sitter_type: string, sitter_name: string) {
 		// manage gameworld login
-		await manage_login(this.ax, email, password, gameworld, sitter_type, sitter_name);
+		this.clientId = await manage_login(this.ax, email, password, gameworld, sitter_type, sitter_name);
 
 		// assign login credentials
 		const { session_gameworld, token_gameworld, msid } = database.get('account').value();
@@ -101,7 +104,7 @@ class api {
 		this.msid = msid;
 
 		// set base url
-		this.ax.defaults.baseURL = `https://${gameworld.toLowerCase()}.kingdoms.com/api`;
+		this.ax.defaults.baseURL = `https://${gameworld.toLowerCase()}.kingdoms.com/api/`;
 	}
 
 	async get_all(): Promise<any[]> {
@@ -109,29 +112,7 @@ class api {
 	}
 
 	async get_cache(params: string[]): Promise<any[]> {
-		const session: string = this.session;
-
-		const payload = {
-			controller: 'cache',
-			action: 'get',
-			params: {
-				names: params
-			},
-			session
-		};
-
-		let response: any = await this.ax.post(`/?c=cache&a=get&t${get_date()}`, payload);
-		if (response?.data?.error?.type == 'ClientException' &&
-			response?.data?.error?.message == 'Authentication failed') {
-			logger.error('authentication failed', 'cache.get');
-			await this.refresh_token();
-			// retry
-			response = await this.ax.post(`/?c=cache&a=get&t${get_date()}`, payload);
-		}
-		if (!response)
-			return null;
-		response.data = this.handle_errors(response.data, 'cache.get');
-		return this.merge_data(response.data);
+		return await this.post('get', 'cache', { names: params });
 	}
 
 	// TODO better program this api call
@@ -400,24 +381,33 @@ class api {
 
 	async post(action: string, controller: string, params: object): Promise<any> {
 		const session = this.session;
-
+		const clientId = this.clientId;
 		const payload = {
 			controller,
 			action,
 			params,
-			session
+			session,
+			clientId
 		};
 
-		let response: any = await this.ax.post(`/?t${get_date()}`, payload);
+		logger.debug(`post: ${JSON.stringify(params)}`, `${controller}.${action}`);
+
+		let response: any = await this.ax.post(`?c=${controller}&a=${action}&t${get_date()}`, payload);
 		if (response.data?.error?.type == 'ClientException' &&
 			response.data?.error?.message == 'Authentication failed') {
-			logger.error('authentication failed', `${controller}.${action}`);
+			logger.error('authentication failed, refreshing token and retrying... ', `${controller}.${action}`);
 			await this.refresh_token();
 			// retry
-			response = await this.ax.post(`/?t${get_date()}`, payload);
+			response = await this.ax.post(`?c=${controller}&a=${action}&t${get_date()}`, payload);
 		}
+		if (!response)
+			return {
+				errors: [{
+					message: 'response null',
+					type: 'unknown'
+				}]
+			};
 		response.data = this.handle_errors(response.data, `${controller}.${action}`);
-
 		return this.merge_data(response.data);
 	}
 

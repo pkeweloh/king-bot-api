@@ -33,7 +33,7 @@ class robber_hideouts extends feature_collection {
 		return 'robber_hideouts';
 	}
 
-	get_new_item(options: Ioptions_robber_hideouts): robber_feature {
+	get_new_item(options: Ioptions): robber_feature {
 		return new robber_feature({ ...options });
 	}
 
@@ -46,7 +46,7 @@ class robber_hideouts extends feature_collection {
 			interval_max: 0,
 			robber1_village_id: 0,
 			robber2_village_id: 0,
-			mission_type: 0,
+			mission_type: 0 as any,
 			mission_type_name: null,
 			t1: 0,
 			t2: 0,
@@ -144,43 +144,33 @@ class robber_feature extends feature_item {
 		return 'robber_hideouts';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const { village_id, interval_min, interval_max, t7, t8, t11 } = this.options;
-			if (!village_id) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-			this.send_hero = t11 > 0;
-			this.send_artillery = t7 > 0 || t8 > 0;
-			const robber: Ivillage = await this.check_robber();
-			if (robber) {
-				let troops_busy: boolean = await this.check_troops();
-				if (troops_busy)
-					logger.info('send aborted because the troops are busy right now', this.params.name);
-				else {
-					await this.send_troops(robber);
-					if (this.options.error)
-						break;
-					// set sleep time
-					await this.check_troops();
-				}
-				this.sleep_time > 0 ?
-					await sleep(this.sleep_time) : // sleep remaining left time
-					await sleep(get_random_int(interval_min, interval_max));
-			}
-			else {
-				logger.info('no robber hideouts at this time, will check again later', this.params.name);
-				await sleep(get_random_int(interval_min, interval_max));
-			}
+	async run(): Promise<number | null> {
+		const { village_id, interval_min, interval_max, t7, t8, t11 } = this.options;
+		if (!village_id) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		this.send_hero = t11 > 0;
+		this.send_artillery = t7 > 0 || t8 > 0;
+
+		const robber: Ivillage = await this.check_robber();
+		if (robber) {
+			let troops_busy: boolean = await this.check_troops();
+			if (troops_busy) {
+				logger.info('send aborted because the troops are busy right now', this.params.name);
+			} else {
+				await this.send_troops(robber);
+				if (this.options.error) return null;
+				await this.check_troops();
+			}
+
+			return this.sleep_time > 0 ? this.sleep_time : get_random_int(interval_min, interval_max);
+		} else {
+			logger.info('no robber hideouts at this time, will check again later', this.params.name);
+			return get_random_int(interval_min, interval_max);
+		}
 	}
 
 	async send_troops(robber_village: Ivillage): Promise<void> {
@@ -225,12 +215,11 @@ class robber_feature extends feature_item {
 		};
 
 		// check defined units to send
-		if (units[1]==0 && units[2]==0 && units[3]==0 && units[4]==0 &&
-			units[5]==0 && units[6]==0 && units[7]==0 && units[8]==0 &&
-			units[9]==0 && units[10]==0 && units[11]==0)
-		{
+		if (units[1] == 0 && units[2] == 0 && units[3] == 0 && units[4] == 0 &&
+			units[5] == 0 && units[6] == 0 && units[7] == 0 && units[8] == 0 &&
+			units[9] == 0 && units[10] == 0 && units[11] == 0) {
 			logger.error(`stop robber hideouts on village ${village_name} ` +
-			'because no units have been defined to send', this.params.name);
+				'because no units have been defined to send', this.params.name);
 			this.options.error = true;
 			return;
 		}
@@ -260,10 +249,9 @@ class robber_feature extends feature_item {
 				return;
 			}
 
-			if (hero_data.isMoving || hero_data.status != hero_status.idle)
-			{
+			if (hero_data.isMoving || hero_data.status != hero_status.idle) {
 				logger.info('send aborted because the hero is ' +
-				hero.get_hero_status(hero_data.status), this.params.name);
+					hero.get_hero_status(hero_data.status), this.params.name);
 				const time_left = get_diff_time(Number(hero_data.untilTime));
 				if (time_left > 0)
 					this.sleep_time = time_left;
@@ -271,7 +259,7 @@ class robber_feature extends feature_item {
 			}
 			if (hero_data.villageId != village_id) {
 				logger.warn('send aborted because the hero is ' +
-				`not native to the village ${village_name}`, this.params.name);
+					`not native to the village ${village_name}`, this.params.name);
 				return;
 			}
 		}

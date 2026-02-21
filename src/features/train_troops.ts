@@ -18,7 +18,7 @@ class train_troops extends feature_collection {
 		return 'train_troops';
 	}
 
-	get_new_item(options: Ioptions_train_troops): train_feature {
+	get_new_item(options: Ioptions): train_feature {
 		return new train_feature({ ...options });
 	}
 
@@ -81,27 +81,20 @@ class train_feature extends feature_item {
 		return 'train_troops';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const { units, interval_min, interval_max } = this.options;
-			if (units.length == 0) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-			await this.train_troops();
-			await sleep(get_random_int(interval_min, interval_max));
+	async run(): Promise<number | null> {
+		const { units, interval_min, interval_max } = this.options;
+		if (units.length == 0) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		await this.train_troops();
+		return get_random_int(interval_min, interval_max);
 	}
 
 	async train_troops(): Promise<void> {
-		const {	units } = this.options;
+		const { units } = this.options;
 
 		for (let unit of units) {
 			const { village_id, village_name, unit_type, amount } = unit;
@@ -173,7 +166,7 @@ class train_feature extends feature_item {
 				continue;
 			}
 			logger.info(
-				`training ${training_amount} units of type ${unit_type_name} in village ${village_name} `+
+				`training ${training_amount} units of type ${unit_type_name} in village ${village_name} ` +
 				`with a cost of wood: ${total_training_cost[0]}, clay: ${total_training_cost[1]}, iron: ${total_training_cost[2]}`,
 				this.params.name);
 			continue;
@@ -181,10 +174,10 @@ class train_feature extends feature_item {
 	}
 
 	building_type(unit_type: number): number {
-		const barracks_units: number[] = [1,2,3,11,12,13,14,21,22];
-		const stable_units: number[] = [4,5,6,15,16,23,24,25,26];
-		const workshop_units: number[] = [7,8,17,18,27,28];
-		if (barracks_units.find(type => type == unit_type)){
+		const barracks_units: number[] = [1, 2, 3, 11, 12, 13, 14, 21, 22];
+		const stable_units: number[] = [4, 5, 6, 15, 16, 23, 24, 25, 26];
+		const workshop_units: number[] = [7, 8, 17, 18, 27, 28];
+		if (barracks_units.find(type => type == unit_type)) {
 			return 19; // barracks
 		}
 		else if (stable_units.find(type => type == unit_type)) {
@@ -209,15 +202,15 @@ class train_feature extends feature_item {
 		let training_amount_wood: any[] = [];
 		let training_amount_clay: any[] = [];
 		let training_amount_iron: any[] = [];
-		total_units_cost_wood.forEach(function (cost: any){
+		total_units_cost_wood.forEach(function (cost: any) {
 			var train_amount = Math.floor(resources[1] / cost);
 			training_amount_wood.push(train_amount);
 		});
-		total_units_cost_clay.forEach(function (cost: any){
+		total_units_cost_clay.forEach(function (cost: any) {
 			var train_amount = Math.floor(resources[2] / cost);
 			training_amount_clay.push(train_amount);
 		});
-		total_units_cost_iron.forEach(function (cost: any){
+		total_units_cost_iron.forEach(function (cost: any) {
 			var train_amount = Math.floor(resources[3] / cost);
 			training_amount_iron.push(train_amount);
 		});

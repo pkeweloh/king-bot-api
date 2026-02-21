@@ -16,7 +16,7 @@ class celebrations extends feature_collection {
 		return 'celebrations';
 	}
 
-	get_new_item(options: Ioptions_celebrations): celebration_feature {
+	get_new_item(options: Ioptions): celebration_feature {
 		return new celebration_feature({ ...options });
 	}
 
@@ -75,31 +75,22 @@ class celebration_feature extends feature_item {
 		return 'celebrations';
 	}
 
-	async run(): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
-
-		while (this.options.run) {
-			const { celebrations } = this.options;
-			if (celebrations.length == 0) {
-				logger.error('stop feature because is not configured', this.params.name);
-				this.options.error = true;
-				break;
-			}
-
-			let sleep_time: number = await this.hold_celebrations();
-			if (!sleep_time)
-				sleep_time = 3600; // default 1 hour
-
-			await sleep(sleep_time);
+	async run(): Promise<number | null> {
+		const { celebrations } = this.options;
+		if (celebrations.length == 0) {
+			logger.error('stop feature because is not configured', this.params.name);
+			this.options.error = true;
+			return null;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		let sleep_time: number = await this.hold_celebrations();
+		if (!sleep_time) sleep_time = 3600; // default 1 hour
+
+		return sleep_time;
 	}
 
 	async hold_celebrations(): Promise<number> {
-		const {	celebrations } = this.options;
+		const { celebrations } = this.options;
 
 		let sleep_time: number = null;
 
@@ -245,7 +236,7 @@ class celebration_feature extends feature_item {
 				continue;
 			}
 			logger.info(
-				`holding ${celebration_type_name} celebration in village ${village_name} `+
+				`holding ${celebration_type_name} celebration in village ${village_name} ` +
 				`with a cost of wood: ${costs[1]}, clay: ${costs[2]}, iron: ${costs[3]}, crop: ${costs[4]}`,
 				this.params.name);
 

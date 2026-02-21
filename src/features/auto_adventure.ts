@@ -72,66 +72,44 @@ class auto_adventure extends feature_single {
 		};
 	}
 
-	async run(): Promise<void> {
-		this.auto_adventure(this.options.type, this.options.min_health);
-	}
+	async run(): Promise<number | null> {
+		const { type, min_health } = this.options;
 
-	async auto_adventure(type: adventure_type, min_health: number): Promise<void> {
-		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
+		let sleep_time: number = 300;
 
-		// write data to database
-		this.options.min_health = min_health;
-		this.options.type = type;
-		this.options.run = true;
+		// get hero data
+		const hero_data: Ihero = await hero.get();
+		if (hero_data) {
+			const can_send =
+				hero_data.adventurePoints > 0 &&
+				!hero_data.isMoving &&
+				hero_data.status == hero_status.idle &&
+				Number(hero_data.health) > min_health;
 
-		database.set('hero.options', this.options).write();
+			if (can_send) {
+				const has_adventure_points: boolean = adventure_type.short ?
+					Number(hero_data.adventurePoints) > 0 :
+					Number(hero_data.adventurePoints) > 1;
 
-		while (this.options.run) {
-			const { type, min_health } = this.options;
-
-			let sleep_time: number = 300;
-
-			// get hero data
-			const hero_data: Ihero = await hero.get();
-			if (hero_data) {
-
-				const can_send =
-					hero_data.adventurePoints > 0 &&
-					!hero_data.isMoving &&
-					hero_data.status == hero_status.idle &&
-					Number(hero_data.health) > min_health;
-
-				if (can_send) {
-
-					const has_adventure_points: boolean = adventure_type.short ?
-						Number(hero_data.adventurePoints) > 0 :
-						Number(hero_data.adventurePoints) > 1;
-
-					if (has_adventure_points) {
-						const aventure = await api.start_adventure(type);
-						if (aventure.errors) {
-							for (let error of aventure.errors)
-								logger.error(`send hero on adventure failed: ${error.message}`, this.params.name);
-						}
-						else
-							logger.info('sent hero on adventure', this.params.name);
+				if (has_adventure_points) {
+					const aventure = await api.start_adventure(type);
+					if (aventure.errors) {
+						for (let error of aventure.errors)
+							logger.error(`send hero on adventure failed: ${error.message}`, this.params.name);
 					}
+					else
+						logger.info('sent hero on adventure', this.params.name);
 				}
-
-				const diff_time: number = get_diff_time(hero_data.untilTime);
-				if (diff_time > 0)
-					sleep_time = diff_time + 5;
 			}
 
-			if (sleep_time <= 0)
-				sleep_time = 300;
-
-			await sleep(sleep_time);
+			const diff_time: number = get_diff_time(hero_data.untilTime);
+			if (diff_time > 0)
+				sleep_time = diff_time + 5;
 		}
 
-		this.running = false;
-		this.options.run = false;
-		logger.info(`uuid: ${this.options.uuid} stopped`, this.params.name);
+		if (sleep_time <= 0) sleep_time = 300;
+
+		return sleep_time;
 	}
 }
 
