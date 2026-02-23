@@ -129,7 +129,7 @@ class server {
 				const queue_ident: string = village.building_collection_ident + village_id;
 				const response: any[] = await api.get_cache([queue_ident]);
 				const rv = [];
-				const data = find_state_data(queue_ident, response);
+				const data = find_state_data(queue_ident, response) ?? [];
 				for (let bd of data) {
 					const build: Ibuilding = bd.data;
 
@@ -206,6 +206,62 @@ class server {
 				return;
 			}
 
+			if (ident == 'log_files') {
+				const fs = require('fs');
+				const p = require('path');
+				const folder = settings.assets_folder;
+				if (!fs.existsSync(folder)) {
+					res.send([]);
+					return;
+				}
+				const files = fs.readdirSync(folder)
+					.filter((f: string) => f.endsWith('.log'))
+					.sort((a: string, b: string) => fs.statSync(p.join(folder, b)).mtimeMs - fs.statSync(p.join(folder, a)).mtimeMs);
+				res.send(files);
+				return;
+			}
+
+			if (ident == 'log_history') {
+				const { file } = req.query;
+				const fs = require('fs');
+				const p = require('path');
+				if (!file || !file.endsWith('.log') || file.includes('..')) {
+					res.send([]);
+					return;
+				}
+				const filepath = p.join(settings.assets_folder, file);
+				if (!fs.existsSync(filepath)) {
+					res.send([]);
+					return;
+				}
+
+				const content = fs.readFileSync(filepath, 'utf8');
+				const lines = content.split('\n').map((l: string) => l.replace(/\r/g, '').trim()).filter((l: string) => l !== '');
+				const historyLogList = [];
+				for (const line of lines) {
+					const ESC = String.fromCharCode(27);
+					const cleanLine = line.replace(new RegExp(`${ESC}\\[[0-9;]*m`, 'g'), '');
+					const match = cleanLine.match(/^.*?\[\s*(info|debug|warn|error)\s*\].*?\s+(.*?)\s+\[(.*?)\]\s+(.*)$/i);
+					if (match) {
+						historyLogList.push({
+							level: match[1].toLowerCase(),
+							timestamp: match[2],
+							group: match[3],
+							message: match[4]
+						});
+					} else {
+						historyLogList.push({
+							level: 'unknown',
+							timestamp: '',
+							group: 'unknown',
+							message: cleanLine
+						});
+					}
+				}
+				res.send(historyLogList);
+				return;
+			}
+
 			if (ident == 'language') {
 				const language = database.get('language').value();
 				res.send({ language });
@@ -268,6 +324,7 @@ class server {
 				database.set('account.logzio_host', logzio_host).write();
 				database.set('account.logzio_token', logzio_token).write();
 				database.set('account.user_agent', user_agent).write();
+
 				response = { status: 'ok' };
 			}
 

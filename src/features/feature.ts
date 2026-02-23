@@ -109,7 +109,7 @@ export abstract class feature_single implements feature {
 		};
 
 		scheduler.scheduleTask(task);
-		logger.info(`Task: ${task.id} started`, task.name);
+		logger.info(`task [${task.id}] started`, task.name);
 	}
 
 	save(): void {
@@ -136,7 +136,7 @@ export abstract class feature_single implements feature {
 		if (action == 'stop') {
 			this.stop();
 			scheduler.removeTask(this.params.ident);
-			logger.info(`Task: ${this.params.ident} stopped`, this.params.name);
+			logger.info(`task [${this.params.ident}] stopped`, this.params.name);
 
 			res.message = 'offline';
 			return res;
@@ -343,7 +343,7 @@ export abstract class feature_item {
 	stop(): void {
 		this.set_options({ ...this.get_options(), run: false });
 		scheduler.removeTask(this.get_options().uuid);
-		logger.info(`Task: ${this.params.ident} stopped`, this.params.name);
+		logger.info(`task [${this.params.ident}] stopped`, this.params.name);
 	}
 
 	save(): void {
@@ -379,6 +379,6 @@ export abstract class feature_item {
 		};
 
 		scheduler.scheduleTask(task);
-		logger.info(`Task: ${task.id} started`, task.name);
+		logger.info(`task [${task.id}] started`, task.name);
 	}
 }

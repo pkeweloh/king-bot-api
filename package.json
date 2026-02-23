@@ -57,13 +57,14 @@
     "preact": "^8.5.3",
     "preact-router": "^2.6.1",
     "public-ip": "^3.2.0",
-    "qs": "^6.10.2",
     "puppeteer": "^21.0.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "qs": "^6.10.2",
     "uniqid": "^5.1.0",
     "unistore": "^3.5.0",
     "winston": "^3.1.0",
+    "winston-daily-rotate-file": "^5.0.0",
     "winston-logzio": "^3.0.3"
   },
   "devDependencies": {

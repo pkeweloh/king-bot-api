@@ -4,7 +4,6 @@ import database from './database';
 
 /**
  * Extracts the clientId from the game by launching a headless browser.
- * Prioritizes localStorage for speed.
  */
 export async function getClientId(gameworld: string, cookieString: string): Promise<string | null> {
 	if (!cookieString) {
@@ -36,11 +35,15 @@ export async function getClientId(gameworld: string, cookieString: string): Prom
 		// Intercept requests as fallback
 		await page.setRequestInterception(true);
 		page.on('request', (req: HTTPRequest) => {
+			if (req.resourceType() === 'xhr') {
+				logger.debug(`${req.method().toLowerCase()} ${req.url()}`, 'puppeteer');
+			}
 			if (!clientId && req.method() === 'POST') {
 				const data = req.postData();
 				const match = data?.match(/"clientId"\s*:\s*"([^"]+)"/) || data?.match(/clientId=([^&]+)/);
-				if (match)
+				if (match) {
 					clientId = match[1];
+				}
 			}
 			req.continue();
 		});
@@ -68,7 +71,7 @@ export async function getClientId(gameworld: string, cookieString: string): Prom
 		}
 
 		if (clientId)
-			logger.info(`clientId found: ${clientId}`, 'client_id_extractor');
+			logger.debug(`clientId found: ${clientId}`, 'client_id_extractor');
 		else
 			logger.error('clientId extraction failed', 'client_id_extractor');
 

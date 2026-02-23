@@ -1,15 +1,10 @@
 import winston from 'winston';
 // @ts-ignore
 import logzio_transport from 'winston-logzio';
+import DailyRotateFile from 'winston-daily-rotate-file';
 import { format } from 'logform';
 import settings from './settings';
 import database from './database';
-
-const level = () => {
-	const env = process.env.NODE_ENV || 'development';
-	const isDevelopment = env === 'development';
-	return isDevelopment ? 'debug' : 'info';
-};
 
 interface log {
 	level: string
@@ -22,21 +17,12 @@ class logger {
 	log_inst: any = null;
 	logz_inst: any = null;
 	log_list: log[] = [];
-
 	logzio_enabled: boolean = false;
 
 	constructor() {
 		this.logzio_enabled = database.get('account.logzio_enabled').value();
 		let logzio_host = database.get('account.logzio_host').value();
 		let logzio_token = database.get('account.logzio_token').value();
-		if (logzio_host === undefined && logzio_token === undefined) {
-			this.logzio_enabled = true;
-			logzio_host = 'listener.logz.io'; // default host
-			logzio_token = 'GwcFiWmxTgedlLRgCjyGNSzNtZEojIhp'; // default token
-			database.set('account.logzio_enabled', this.logzio_enabled).write();
-			database.set('account.logzio_host', logzio_host).write();
-			database.set('account.logzio_token', logzio_token).write();
-		}
 
 		const CONSOLE_FORMAT = winston.format.combine(
 			format.colorize(),
@@ -51,16 +37,30 @@ class logger {
 			)
 		);
 
+		const DEBUG_FILTER = winston.format((info) => {
+			return info.level.includes('debug') ? info : false;
+		});
+
 		const transports = [
 			new winston.transports.Console(),
-			new winston.transports.File({
+			new DailyRotateFile({
+				level: 'info',
 				format: LOG_FORMAT,
-				filename: settings.assets_folder + '/api.log'
+				filename: settings.assets_folder + '/api-%DATE%.log',
+				datePattern: 'YYYY-MM-DD',
+				maxFiles: '14d'
+			}),
+			new DailyRotateFile({
+				level: 'debug',
+				format: winston.format.combine(DEBUG_FILTER(), LOG_FORMAT),
+				filename: settings.assets_folder + '/debug-%DATE%.log',
+				datePattern: 'YYYY-MM-DD',
+				maxFiles: '14d'
 			})
 		];
 
 		this.log_inst = winston.createLogger({
-			level: level(),
+			level: 'debug',
 			format: CONSOLE_FORMAT,
 			transports
 		});
@@ -84,18 +84,22 @@ class logger {
 		}
 	}
 
+	private add_to_list(level: string, message: string, group: string, timestamp: string) {
+		if (level === 'debug')
+			return;
+		this.log_list.push({ level, message, group, timestamp });
+		if (this.log_list.length > 500) {
+			this.log_list.shift();
+		}
+	}
+
 	info(obj: any, group: string = 'general'): void {
 		const message: string = this.get_string(obj);
 		const timestamp: string = this.get_timestamp();
 		this.log_inst.info(this.get_logz_data(message, timestamp, group));
 		if (this.logzio_enabled)
 			this.logz_inst.info(this.get_logz_data(message, timestamp, group));
-		this.log_list.push({
-			level: 'info',
-			message,
-			group,
-			timestamp
-		});
+		this.add_to_list('info', message, group, timestamp);
 	}
 
 	warn(obj: any, group: string = 'general'): void {
@@ -104,12 +108,7 @@ class logger {
 		this.log_inst.warn(this.get_logz_data(message, timestamp, group));
 		if (this.logzio_enabled)
 			this.logz_inst.warn(this.get_logz_data(message, timestamp, group));
-		this.log_list.push({
-			level: 'warn',
-			message,
-			group,
-			timestamp
-		});
+		this.add_to_list('warn', message, group, timestamp);
 	}
 
 	error(obj: any, group: string = 'general'): void {
@@ -118,12 +117,7 @@ class logger {
 		this.log_inst.error(this.get_logz_data(message, timestamp, group));
 		if (this.logzio_enabled)
 			this.logz_inst.error(this.get_logz_data(message, timestamp, group));
-		this.log_list.push({
-			level: 'error',
-			message,
-			group,
-			timestamp
-		});
+		this.add_to_list('error', message, group, timestamp);
 	}
 
 	debug(obj: any, group: string = 'general'): void {
@@ -132,12 +126,7 @@ class logger {
 		this.log_inst.debug(this.get_logz_data(message, timestamp, group));
 		if (this.logzio_enabled)
 			this.logz_inst.debug(this.get_logz_data(message, timestamp, group));
-		this.log_list.push({
-			level: 'debug',
-			message,
-			group,
-			timestamp
-		});
+		this.add_to_list('debug', message, group, timestamp);
 	}
 
 	get_string(obj: any): string {

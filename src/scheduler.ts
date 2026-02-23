@@ -2,10 +2,10 @@ import { sleep, get_random_int } from './util';
 import logger from './logger';
 
 export interface ITask {
-    id: string;
-    name: string;
-    nextRun: number; // timestamp in seconds
-    run: () => Promise<number | null>; // returns next delay in seconds or null if finished
+	id: string;
+	name: string;
+	nextRun: number; // timestamp in seconds
+	run: () => Promise<number | null>; // returns next delay in seconds or null if finished
 }
 
 class Scheduler {
@@ -14,10 +14,10 @@ class Scheduler {
 	private minDelayBetweenTasks: number = 2; // minimum seconds between any two tasks to avoid bursts
 
 	/**
-     * Schedules or updates a task.
-     * @param task The task to schedule
-     * @param withJitter If true, adds a random jitter to the execution time
-     */
+	 * Schedules or updates a task.
+	 * @param task The task to schedule
+	 * @param withJitter If true, adds a random jitter to the execution time
+	 */
 	public scheduleTask(task: ITask, withJitter: boolean = true): void {
 		if (withJitter) {
 			const jitter = get_random_int(1, 10); // add 1-10 seconds of jitter
@@ -25,7 +25,7 @@ class Scheduler {
 		}
 
 		this.tasks.set(task.id, task);
-		logger.debug(`Task [${task.name}] scheduled for ${new Date(task.nextRun * 1000).toLocaleTimeString()}`, 'scheduler');
+		logger.debug(`task [${task.name}] scheduled for ${new Date(task.nextRun * 1000).toLocaleTimeString()}`, 'scheduler');
 	}
 
 	public removeTask(taskId: string): void {
@@ -37,7 +37,7 @@ class Scheduler {
 	public async start(): Promise<void> {
 		if (this.isRunning) return;
 		this.isRunning = true;
-		logger.info('Task Scheduler started', 'scheduler');
+		logger.info('task scheduler started', 'scheduler');
 
 		while (this.isRunning) {
 			const now = Math.floor(Date.now() / 1000);
@@ -49,12 +49,12 @@ class Scheduler {
 				const task = dueTasks[0];
 
 				try {
-					logger.debug(`Executing task: [${task.name}]`, 'scheduler');
+					logger.debug(`executing task: [${task.name}]`, 'scheduler');
 					const nextDelay = await task.run();
 
 					// If the task was removed from the map during execution, don't re-add it
 					if (!this.tasks.has(task.id)) {
-						logger.debug(`Task [${task.name}] was removed during execution, skipping return handling`, 'scheduler');
+						logger.debug(`task [${task.name}] was removed during execution, skipping return handling`, 'scheduler');
 						continue;
 					}
 
@@ -63,10 +63,10 @@ class Scheduler {
 						this.scheduleTask(task, true);
 					} else {
 						this.tasks.delete(task.id);
-						logger.info(`Task [${task.name}] completed and removed`, 'scheduler');
+						logger.info(`task [${task.name}] completed and removed`, 'scheduler');
 					}
 				} catch (error: any) {
-					logger.error(`Error executing task [${task.name}]: ${error.message}`, 'scheduler');
+					logger.error(`error executing task [${task.name}]: ${error.message}`, 'scheduler');
 					if (error.stack) {
 						logger.debug(error.stack, 'scheduler');
 					}
@@ -87,7 +87,7 @@ class Scheduler {
 
 	public stop(): void {
 		this.isRunning = false;
-		logger.info('Task Scheduler stopped', 'scheduler');
+		logger.info('task scheduler stopped', 'scheduler');
 	}
 }
 

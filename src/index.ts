@@ -61,11 +61,11 @@ class kingbot {
 		// schedule ping task
 		scheduler.scheduleTask({
 			id: 'ping',
-			name: 'Ping',
+			name: 'ping',
 			nextRun: Math.floor(Date.now() / 1000),
 			run: async () => {
 				await api.ping();
-				return 100; // run every 100 seconds
+				return 100; // seconds
 			}
 		}, false);
 	}

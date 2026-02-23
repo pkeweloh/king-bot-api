@@ -170,9 +170,13 @@ const languages = {
 		lang_log_group: 'group',
 		lang_log_message: 'message',
 		lang_log_timestamp: 'time',
+		lang_log_select_file: 'select log file',
+		lang_log_current_session: '[current session]',
 
 		lang_settings_title: 'settings',
 		lang_settings_description: '',
+		lang_settings_general: 'general',
+		lang_settings_logzio: 'logz.io integration',
 		lang_settings_logzio_enabled: 'enable logz.io',
 		lang_settings_logzio_host: 'logz.io host',
 		lang_settings_logzio_token: 'logz.io token',
@@ -513,9 +517,15 @@ const languages = {
 		lang_log_group: 'grupo',
 		lang_log_message: 'mensaje',
 		lang_log_timestamp: 'tiempo',
+		lang_log_select_file: 'selecciona archivo log',
+		lang_log_current_session: '[sesión actual]',
 
 		lang_settings_title: 'ajustes',
 		lang_settings_description: '',
+		lang_settings_general: 'generales',
+		lang_settings_logzio: 'integración logz.io',
+		lang_settings_logzio_enabled: 'activar logz.io',
+		lang_settings_logzio_host: 'logz.io host',
 		lang_settings_logzio_token: 'logz.io token',
 
 		lang_login_title: 'iniciar sesión',
@@ -724,7 +734,7 @@ const languages = {
 		lang_feature_desc_trade_route: 'händler werden automatisch zwischen zwei städten geschickt.',
 		lang_feature_desc_timed_send: 'schickt truppen zu einer geplanten zeit, wobei die reisezeit der einheiten für die ankunftszeit ' +
 			'berücksichtigt wird.',
-		lang_feature_desc_train_troops: 'truppen in einem bestimmten intervall und in einer bestimmten reihenfolge auszubilden, geht es in '+
+		lang_feature_desc_train_troops: 'truppen in einem bestimmten intervall und in einer bestimmten reihenfolge auszubilden, geht es in ' +
 			'jedem intervall die gesamte liste durch.\nwenn die menge größer ist als die kosten der verfügbaren ressourcen, bildet es so viele ' +
 			'truppen wie möglich aus.',
 		lang_feature_desc_robber_hideouts: 'sucht nach räuberverstecken und schickt die entsprechenden truppen zum angriff. er versucht es so ' +
@@ -860,9 +870,15 @@ const languages = {
 		lang_log_group: 'gruppe',
 		lang_log_message: 'meldung',
 		lang_log_timestamp: 'zeit',
+		lang_log_select_file: 'logdatei auswählen',
+		lang_log_current_session: '[aktuelle sitzung]',
 
 		lang_settings_title: 'einstellung',
 		lang_settings_description: '',
+		lang_settings_general: 'allgemeine',
+		lang_settings_logzio: 'logz.io integration',
+		lang_settings_logzio_enabled: 'aktiviere logz.io',
+		lang_settings_logzio_host: 'logz.io host',
 		lang_settings_logzio_token: 'logz.io token',
 
 		lang_login_title: 'einloggen',

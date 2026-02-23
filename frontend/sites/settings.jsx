@@ -74,6 +74,18 @@ export default class Settings extends Component {
 
 					<div className='column is-half'>
 
+						<h4 class="title is-4">{props.lang_settings_general}</h4>
+
+						<Input
+							label='User-Agent'
+							placeholder='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0'
+							value={ this.state.user_agent }
+							onChange={ e => this.setState({ user_agent: e.target.value }) }
+							className={ classNames({ 'input': true, 'is-radiusless': true, 'is-danger': this.state.error_user_agent }) }
+							icon='fa-user'
+						/>
+
+						<h4 class="title is-4">{props.lang_settings_logzio}</h4>
 						<div class="field">
 							<p class='control'>
 								<label class="checkbox is-radiusless">
@@ -103,15 +115,6 @@ export default class Settings extends Component {
 							onChange={ e => this.setState({ logzio_token: e.target.value }) }
 							className={ input_class_logzio_token }
 							icon='fa-cube'
-						/>
-
-						<Input
-							label='User-Agent'
-							placeholder='Mozilla/5.0 ...'
-							value={ this.state.user_agent }
-							onChange={ e => this.setState({ user_agent: e.target.value }) }
-							className={ classNames({ 'input': true, 'is-radiusless': true, 'is-danger': this.state.error_user_agent }) }
-							icon='fa-user'
 						/>
 
 					</div>
