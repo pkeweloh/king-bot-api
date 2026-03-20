@@ -4,7 +4,7 @@ import logger from './logger';
 import api from './api';
 import database from './database';
 import settings from './settings';
-import { getClientId } from './client_id_extractor';
+import BrowserService from './browser';
 const ci = require('cheerio');
 
 async function manage_login(
@@ -35,7 +35,7 @@ async function manage_login(
 	settings.sitter_type = sitter_type;
 	settings.avatar_name = db_avatar_name;
 
-	let clientId = '';
+	let client_id: string | null = null;
 
 	if (db_email === email) {
 		logger.info('found lobby session in database...', 'login');
@@ -54,9 +54,10 @@ async function manage_login(
 
 				logger.info(`found gameworld session in database: ${session_gameworld}`, 'login');
 
-				axios.defaults.headers.common['Cookie'] += cookies_gameworld;
+				const merged_cookies = merge_cookies(cookies_lobby, cookies_gameworld);
+				axios.defaults.headers.common['Cookie'] = merged_cookies;
 
-				api.apply_gameworld_state(gameworld, session_gameworld, msid);
+				api.apply_gameworld_state(gameworld, session_gameworld, msid, cookies_gameworld);
 
 				if (await api.validate_gameworld_session()) {
 					logger.info(`successful database reconnection to gameworld ${gameworld}`, 'login');
@@ -71,12 +72,14 @@ async function manage_login(
 		}
 	}
 
+	let current_msid = database.get('account.msid').value();
 	let cookies = axios.defaults.headers.common['Cookie'];
 
 	// login if not recovered
 	if (!cookies) {
 		try {
 			const { msid, session_lobby } = await login_to_lobby(axios, email, password);
+			current_msid = msid;
 			await login_to_gameworld(axios, gameworld, sitter_type, sitter_name, msid, session_lobby);
 			cookies = axios.defaults.headers.common['Cookie'];
 		} catch (e: any) {
@@ -85,29 +88,33 @@ async function manage_login(
 		}
 	}
 
-	// get clientId
-	clientId = await getClientId(gameworld, cookies);
-	if (!clientId) {
+	// get clientId via persistent browser
+	client_id = await BrowserService.init(gameworld, cookies, current_msid);
+	if (!client_id) {
 		logger.error('could not resolve clientId. authentication aborted.', 'login');
+		database.set('account.session_lobby', null).write();
+		database.set('account.cookies_lobby', null).write();
 		process.exit();
 	}
 
 	// sync playerId
 	api.sync_player_state(cookies);
 
-	return clientId;
+	return client_id;
 }
 
 async function login_to_lobby(axios: AxiosInstance, email: string, password: string): Promise<any> {
 	const mellon = new MellonService(axios);
 
-	const msid = await mellon.getMsid();
-	const { token, url } = await mellon.authenticate(msid, { email, password });
-	const { cookies, session } = await mellon.redeemToken(url);
+	const { msid, cookies: cookies_msid } = await mellon.getMsid();
+	const { token, url, cookies: cookies_auth } = await mellon.authenticate(msid, { email, password });
+	const { cookies: cookies_redeem, session } = await mellon.redeemToken(url);
 
 	const token_lobby = token;
-	const cookies_lobby = cookies;
 	const session_lobby = session;
+
+	// accumulate and de-duplicate cookies
+	const cookies_lobby = merge_cookies(cookies_msid, cookies_auth, cookies_redeem);
 
 	axios.defaults.headers.common['Cookie'] = cookies_lobby;
 
@@ -148,15 +155,17 @@ async function login_to_gameworld(
 		avatar_name = await get_avatar_name(session_lobby, gameworld);
 	}
 
-	const { token, url } = await mellon.joinGameworld(gameworld, msid, avatarId, isSitter);
-	const { session, cookies } = await api.create_gameworld_session(gameworld, token, msid, url);
+	const { token, url, cookies: cookies_join } = await mellon.joinGameworld(gameworld, msid, avatarId, isSitter);
+	const { session, cookies: cookies_gw } = await api.create_gameworld_session(gameworld, token, msid, url);
+
+	const cookies_gameworld = merge_cookies(cookies_join, cookies_gw);
 
 	logger.info(`Logged into gameworld ${gameworld} with session ${session}`, 'login');
 
 	// set values to database
 	database.set('account.token_gameworld', token).write();
 	database.set('account.session_gameworld', session).write();
-	database.set('account.cookies_gameworld', cookies).write();
+	database.set('account.cookies_gameworld', cookies_gameworld).write();
 	database.set('account.gameworld', gameworld).write();
 	database.set('account.sitter_type', sitter_type).write();
 	database.set('account.sitter_name', sitter_name).write();
@@ -164,7 +173,7 @@ async function login_to_gameworld(
 
 	settings.avatar_name = avatar_name;
 
-	return { session, token, cookies };
+	return { session, token, cookies: cookies_gameworld };
 }
 
 async function get_gameworld_id(session: string, gameworld_string: string): Promise<string> {
@@ -213,6 +222,24 @@ async function get_avatar_id(
 
 	logger.error(`sitter_name: ${sitter_name} and gameworld: ${gameworld_string} do not match with any sitter spot.`, 'login');
 	process.exit();
+}
+
+
+function merge_cookies(...cookie_strings: string[]): string {
+	const cookie_map = new Map<string, string>();
+	for (const str of cookie_strings) {
+		if (!str) continue;
+		const pairs = str.split(';').map(p => p.trim()).filter(Boolean);
+		for (const pair of pairs) {
+			const [name, ...rest] = pair.split('=');
+			cookie_map.set(name.trim(), rest.join('=').trim());
+		}
+	}
+	let result = '';
+	cookie_map.forEach((value, name) => {
+		result += `${name}=${value}; `;
+	});
+	return result;
 }
 
 export default manage_login;

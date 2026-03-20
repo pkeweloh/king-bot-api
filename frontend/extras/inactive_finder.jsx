@@ -7,6 +7,7 @@ import { handle_response } from '../actions';
 import InactiveTable from '../components/inactive_table';
 import InfoTitle from '../components/info_title';
 import { DoubleInput, Select, Button } from '../components/form';
+import TableStatusLayer from '../components/table_status_layer';
 
 @connect(`notifications,${storeKeys}`, handle_response)
 export default class InactiveFinder extends Component {
@@ -28,6 +29,8 @@ export default class InactiveFinder extends Component {
 		error_farmlist: false,
 		loading: false,
 		message: '',
+		status_message: '',
+		data_revision: 0,
 	};
 
 	componentDidMount() {
@@ -83,7 +86,7 @@ export default class InactiveFinder extends Component {
 
 		if (this.state.error_village) return;
 
-		this.setState({ loading: true, message: '', inactives: [] });
+		this.setState({ loading: true, message: '', inactives: [], status_message: this.props.lang_table_searching });
 
 		const {
 			selected_farmlist,
@@ -119,12 +122,13 @@ export default class InactiveFinder extends Component {
 		const { error, data, message } = response.data;
 
 		if (error) {
-			this.setState({ loading: false });
+			this.setState({ loading: false, status_message: '' });
 			this.props.handle_response(response.data);
 			return;
 		}
 		else {
-			this.setState({ inactives: [ ...data ], loading: false });
+			const tableMessage = data.length ? '' : this.props.lang_table_no_results;
+			this.setState({ inactives: [ ...data ], loading: false, status_message: tableMessage, data_revision: Date.now() });
 		}
 
 		this.setState({ message });
@@ -136,7 +140,9 @@ export default class InactiveFinder extends Component {
 		min_player_pop, max_player_pop,
 		min_village_pop, max_village_pop,
 		min_distance, max_distance,
-		inactive_for, inactives, loading, message
+		inactive_for, inactives, loading, message,
+		status_message,
+		data_revision
 	}) {
 		const village_select_class = classNames({
 			select: true,
@@ -210,7 +216,7 @@ export default class InactiveFinder extends Component {
 							placeholder2 = { props.lang_inactivefinder_default + ': 200' }
 							value1 = { min_village_pop }
 							value2 = { max_village_pop }
-							onChange1 = { e => this.setState({ min_village_pop: e.target.value }) }
+							onChange1 = { e  => this.setState({ min_village_pop: e.target.value }) }
 							onChange2 = { e => this.setState({ max_village_pop: e.target.value }) }
 							icon = 'fa-house-user'
 						/>
@@ -221,6 +227,7 @@ export default class InactiveFinder extends Component {
 							onClick = { this.search.bind(this) }
 							style = {{ marginRight: '1rem' }}
 							icon = 'fa-search'
+							disabled = { loading }
 						/>
 
 					</div>
@@ -275,10 +282,18 @@ export default class InactiveFinder extends Component {
 
 				</div>
 
-				<InactiveTable
-					content={ inactives }
-					clicked={ this.clicked.bind(this) }
-				/>
+				<div style={{ position: 'relative' }}>
+					<TableStatusLayer
+						message={ status_message }
+						searching={ status_message === props.lang_table_searching }
+						onClose={ () => this.setState({ status_message: '' }) }
+					/>
+					<InactiveTable
+						content={ inactives }
+						clicked={ this.clicked.bind(this) }
+						data_revision={ data_revision }
+					/>
+				</div>
 
 			</div>
 		);

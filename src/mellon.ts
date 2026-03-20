@@ -9,9 +9,10 @@ export class MellonService {
 	/**
 	 * Obtains the msid from the Mellon authentication form.
 	 */
-	async getMsid(): Promise<string> {
+	async getMsid(): Promise<{ msid: string, cookies: string }> {
 		const url = 'https://mellon-t5.traviangames.com/authentication/login/ajax/form-validate?';
 		let res: AxiosResponse = await this.axios.get(url);
+		const cookies = this.parseCookies(res.headers['set-cookie'] || []);
 		let html: string = cheerio.load(res.data).html();
 
 		let retries = 1;
@@ -29,13 +30,13 @@ export class MellonService {
 		}
 
 		logger.debug('msid: ' + msid, 'mellon');
-		return msid;
+		return { msid, cookies };
 	}
 
 	/**
 	 * Authenticates with email and password to obtain a lobby token.
 	 */
-	async authenticate(msid: string, credentials: { email: string; password: string }): Promise<{ token: string, url: string }> {
+	async authenticate(msid: string, credentials: { email: string; password: string }): Promise<{ token: string, url: string, cookies: string }> {
 		const url = `https://mellon-t5.traviangames.com/authentication/login/ajax/form-validate?msid=${msid}&msname=msid`;
 		const options: AxiosRequestConfig = {
 			method: 'POST',
@@ -45,6 +46,7 @@ export class MellonService {
 		};
 
 		let res = await this.axios(options);
+		const cookies = this.parseCookies(res.headers['set-cookie'] || []);
 		let rv = this.parseToken(res.data);
 
 		let retries = 1;
@@ -61,7 +63,7 @@ export class MellonService {
 		}
 
 		logger.debug('lobby token: ' + rv.token, 'mellon');
-		return rv;
+		return { ...rv, cookies };
 	}
 
 	/**
@@ -76,33 +78,35 @@ export class MellonService {
 		};
 
 		const res = await this.axios(options);
-		const cookies = this.parseCookies(res.headers['set-cookie']?.slice(2) || []);
+		const cookies = this.parseCookies(res.headers['set-cookie'] || []);
 
 		const sessionLink: string = res.headers.location;
-		if (!sessionLink || sessionLink.indexOf('=') === -1) {
+		if (!sessionLink) {
 			logger.error('failed to extract session link from response', 'mellon');
 			throw new Error('Failed to extract lobby session link. Mellon accepted login but redirection failed.');
 		}
 
-		const session = sessionLink.substring(sessionLink.lastIndexOf('=') + 1);
+		const sessionMatch = sessionLink.match(/[?&]session=([^&]+)/);
+		const session = sessionMatch ? sessionMatch[1] : sessionLink.substring(sessionLink.lastIndexOf('=') + 1);
 		return { cookies, session };
 	}
 
 	/**
 	 * Joins a gameworld (or logs in as guest/sitter) to obtain a world token.
 	 */
-	async joinGameworld(gameworld: string, msid: string, avatarId: string, isSitter: boolean): Promise<{ token: string, url: string }> {
+	async joinGameworld(gameworld: string, msid: string, avatarId: string, isSitter: boolean): Promise<{ token: string, url: string, cookies: string }> {
 		const mellonURL = isSitter
 			? `https://mellon-t5.traviangames.com/game-world/join-as-guest/avatarId/${avatarId}?msname=msid&msid=${msid}`
 			: `https://mellon-t5.traviangames.com/game-world/join/gameWorldId/${avatarId}?msname=msid&msid=${msid}`;
 
 		try {
 			const res = await this.axios.get(mellonURL);
+			const cookies = this.parseCookies(res.headers['set-cookie'] || []);
 			const rv = this.parseToken(res.data);
 			if (!rv.token) throw new Error('Failed to obtain gameworld token. You might not have access to this world or it is offline.');
 
 			logger.debug('gameworld token: ' + rv.token, 'mellon');
-			return rv;
+			return { ...rv, cookies };
 		} catch (e: any) {
 			logger.error(`error login to gameworld ${gameworld}: ${e.message}`, 'mellon');
 			throw e;
@@ -113,7 +117,7 @@ export class MellonService {
 		const msidMatch = html.match(/msid["']?\s*[:=,]\s*["']?([a-zA-Z0-9.\-_]+)["']?/i);
 		if (msidMatch) return msidMatch[1];
 
-		// Fallback to permissive search
+		// fallback to permissive search
 		const rawMatch = html.match(/msid.*?([a-zA-Z0-9]{10,})/i);
 		return rawMatch ? rawMatch[1] : '';
 	}

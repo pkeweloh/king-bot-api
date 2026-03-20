@@ -25,6 +25,35 @@ import {
 } from './features';
 import { farming, village, player, troops } from './gamedata';
 import database from './database';
+import map_scanner from './map_scanner';
+import world_scan_proxy from './world_scan_proxy';
+import cache from './cache';
+import { xy2id } from './util';
+
+function analyze_map_data(mapData: any) {
+	if (!mapData) {
+		return { cells_count: 0, layer1: 0, layer3: 0 };
+	}
+	const cells = Array.isArray(mapData?.map?.cells)
+		? mapData.map.cells
+		: Array.isArray(mapData?.cells)
+			? mapData.cells
+			: [];
+	const layer1 = new Set<number>();
+	const layer3 = new Set<number>();
+	for (const cell of cells) {
+		const x = Number(cell.x);
+		const y = Number(cell.y);
+		if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+		layer1.add(xy2id(Math.floor(x / 7), Math.floor(y / 7)));
+		layer3.add(xy2id(Math.floor(x / 21), Math.floor(y / 21)));
+	}
+	return {
+		cells_count: Array.isArray(cells) ? cells.length : 0,
+		layer1: layer1.size,
+		layer3: layer3.size
+	};
+}
 
 class server {
 	app: any = null;
@@ -56,7 +85,7 @@ class server {
 
 			for (let feat of this.features) response = [...response, ...feat.get_feature_params()];
 
-			res.send(response);
+			res.json(response);
 		});
 
 		this.app.post('/api/feature', (req: any, res: any) => {
@@ -72,7 +101,7 @@ class server {
 				}
 			}
 
-			res.send(response);
+			res.json(response);
 		});
 
 		this.app.get('/api/data', async (req: any, res: any) => {
@@ -81,20 +110,20 @@ class server {
 			if (ident == 'villages') {
 				const villages = await village.get_own();
 				const data = find_state_data(village.collection_own_ident, villages);
-				res.send(data);
+				res.json(data);
 				return;
 			}
 
 			if (ident == 'worldwonders') {
 				const response = await api.get_world_wonders();
-				res.send(response.results);
+				res.json(response.results);
 				return;
 			}
 
 			if (ident == 'farmlists') {
 				const farmlists = await farming.get_own();
 				const data = find_state_data(farming.farmlist_ident, farmlists);
-				res.send(data);
+				res.json(data);
 				return;
 			}
 
@@ -102,11 +131,11 @@ class server {
 				const player_data: Iplayer = await player.get();
 				if (!player_data) {
 					logger.error('could not get player data', 'server');
-					res.send(null);
+					res.json(null);
 					return;
 				}
 				const data: tribe = player_data.tribeId;
-				res.send(data);
+				res.json(data);
 				return;
 			}
 
@@ -114,13 +143,13 @@ class server {
 				const player_data: Iplayer = await player.get();
 				if (!player_data) {
 					logger.error('could not get player data', 'server');
-					res.send(null);
+					res.json(null);
 					return;
 				}
 				const settings_ident: string = 'Settings:' + player_data.playerId;
 				const response: any[] = await api.get_cache([settings_ident]);
 				const settings_data = find_state_data(settings_ident, response);
-				res.send(settings_data);
+				res.json(settings_data);
 				return;
 			}
 
@@ -137,14 +166,14 @@ class server {
 						if (Number(build.lvl) > 0)
 							rv.push(build);
 				}
-				res.send(rv);
+				res.json(rv);
 				return;
 			}
 
 			if (ident == 'building') {
 				const { village_id, building_type } = req.query;
 				const building_data: Ibuilding = await village.get_building(Number(village_id), Number(building_type));
-				res.send(building_data);
+				res.json(building_data);
 				return;
 			}
 
@@ -152,31 +181,32 @@ class server {
 				const { village_id } = req.query;
 				const village_data = await village.get_own();
 				const village_obj: Ivillage = village.find(village_id, village_data);
-				res.send(village_obj);
+				res.json(village_obj);
 				return;
 			}
 
 			if (ident == 'building_types') {
-				res.send(building_types);
+				res.json(building_types);
 				return;
 			}
 
 			if (ident == 'units') {
 				const { village_id } = req.query;
 				const units: Iunits = await troops.get_units(village_id, troops_type.stationary, troops_status.home);
-				res.send(units);
+				res.json(units);
 				return;
 			}
 
 			if (ident == 'unit_types') {
-				res.send(unit_types);
+				res.json(unit_types);
 				return;
 			}
 
 			if (ident == 'research') {
 				const { village_id, unit_type } = req.query;
 				const research_ident: string = 'Research:' + village_id;
-				const response: any[] = await api.get_cache([research_ident]);
+				const unit_research_queue_ident: string = 'UnitResearchQueue:' + village_id;
+				const response: any[] = await api.get_cache([research_ident, unit_research_queue_ident]);
 				const rv = [];
 				const data = find_state_data(research_ident, response);
 				for (let research_unit of data.units) {
@@ -184,12 +214,12 @@ class server {
 						continue;
 					rv.push(research_unit);
 				}
-				res.send(rv);
+				res.json(rv);
 				return;
 			}
 
 			if (ident == 'settings') {
-				res.send({
+				res.json({
 					email: settings.email,
 					gameworld: settings.gameworld,
 					avatar_name: settings.avatar_name
@@ -200,9 +230,9 @@ class server {
 			if (ident == 'logger') {
 				const { limit } = req.query;
 				if (limit && Number(limit) > 0)
-					res.send(logger.log_list.slice(-Number(limit)));
+					res.json(logger.log_list.slice(-Number(limit)));
 				else
-					res.send(logger.log_list);
+					res.json(logger.log_list);
 				return;
 			}
 
@@ -211,13 +241,15 @@ class server {
 				const p = require('path');
 				const folder = settings.assets_folder;
 				if (!fs.existsSync(folder)) {
-					res.send([]);
+					res.json([]);
 					return;
 				}
+				const debug_enabled = database.get('account.debug_enabled').value();
 				const files = fs.readdirSync(folder)
 					.filter((f: string) => f.endsWith('.log'))
+					.filter((f: string) => debug_enabled ? true : !f.startsWith('debug-'))
 					.sort((a: string, b: string) => fs.statSync(p.join(folder, b)).mtimeMs - fs.statSync(p.join(folder, a)).mtimeMs);
-				res.send(files);
+				res.json(files);
 				return;
 			}
 
@@ -226,12 +258,17 @@ class server {
 				const fs = require('fs');
 				const p = require('path');
 				if (!file || !file.endsWith('.log') || file.includes('..')) {
-					res.send([]);
+					res.json([]);
+					return;
+				}
+				const debug_enabled = database.get('account.debug_enabled').value();
+				if (file.startsWith('debug-') && !debug_enabled) {
+					res.json([]);
 					return;
 				}
 				const filepath = p.join(settings.assets_folder, file);
 				if (!fs.existsSync(filepath)) {
-					res.send([]);
+					res.json([]);
 					return;
 				}
 
@@ -258,33 +295,107 @@ class server {
 						});
 					}
 				}
-				res.send(historyLogList);
+				res.json(historyLogList);
 				return;
 			}
 
 			if (ident == 'language') {
 				const language = database.get('language').value();
-				res.send({ language });
+				res.json({ language });
 				return;
 			}
 
-			res.send('error');
+			res.json('error');
 		});
 
 		this.app.post('/api/language', async (req: any, res: any) => {
 			const { language } = req.body;
 			database.set('language', language).write();
-			res.send({ status: 'ok' });
+			res.json({ status: 'ok' });
 		});
 
 		this.app.post('/api/find', async (req: any, res: any) => {
 			const response = await api.get_cache(req.body);
-			res.send(response);
+			res.json(response);
+		});
+
+		this.app.get('/api/map_cache/status', (req: any, res: any) => {
+			const last_seeded_at = database.get('map_cache.last_seeded_at').value() ?? null;
+			const map_data_updated_at = database.get('map_cache.map_data_updated_at').value() ?? null;
+			const map_data_radius = Number(database.get('map_cache.map_data_radius').value()) || null;
+			const map_data = cache.load_map_data();
+			const stats = analyze_map_data(map_data);
+			res.json({
+				last_seeded_at,
+				map_data_updated_at,
+				map_data_radius,
+				map_data_cells: stats.cells_count,
+				map_data_regions: {
+					layer1: stats.layer1,
+					layer3: stats.layer3
+				}
+			});
+		});
+
+		this.app.get('/api/map_cache/map_data', (req: any, res: any) => {
+			const map_data = cache.load_map_data();
+			const last_updated_at = database.get('map_cache.map_data_updated_at').value() ?? null;
+			const map_data_radius = Number(database.get('map_cache.map_data_radius').value()) || null;
+			res.json({
+				last_updated_at,
+				radius: map_data_radius,
+				map_data
+			});
+		});
+
+		this.app.post('/api/map_cache/seed', async (req: any, res: any) => {
+			const stored_radius = Number(database.get('travian_config.world_radius').value());
+			const default_radius = Number.isFinite(stored_radius) && stored_radius > 0 ? stored_radius : 400;
+			const requested_radius = Number(req.body?.world_radius ?? req.body?.radius ?? 0);
+			const initial_radius = Number.isFinite(requested_radius) && requested_radius > 0 ? requested_radius : default_radius;
+			const gameworld = settings.gameworld;
+			try {
+				const map_data_response = await api.get_map(gameworld);
+				if (!map_data_response || map_data_response.errors) {
+					throw new Error(map_data_response?.errors?.[0]?.message ?? 'failed to fetch map data');
+				}
+
+				cache.save_map_data(map_data_response);
+				const map_data_stats = analyze_map_data(map_data_response);
+				const map_data_map = map_data_response?.map ?? map_data_response?.response?.map ?? null;
+				const map_data_radius_value = Number(map_data_map?.radius ?? initial_radius);
+				const effective_radius = Number.isFinite(map_data_radius_value) && map_data_radius_value > 0 ? map_data_radius_value : initial_radius;
+				const map_data_updated_at = Date.now();
+				database.set('map_cache.map_data_updated_at', map_data_updated_at).write();
+				database.set('map_cache.map_data_radius', effective_radius).write();
+
+				await map_scanner.scan_world(effective_radius, { collect_tiles: false, seed: true });
+				const last_seeded_at = Date.now();
+				database.set('map_cache.last_seeded_at', last_seeded_at).write();
+				database.set('map_cache.radius', effective_radius).write();
+				world_scan_proxy.clear();
+				res.json({
+					last_seeded_at,
+					map_data_updated_at,
+					map_data_radius: effective_radius,
+					map_data_cells: map_data_stats.cells_count,
+					map_data_regions: {
+						layer1: map_data_stats.layer1,
+						layer3: map_data_stats.layer3
+					}
+				});
+			} catch (error: any) {
+				logger.error(`failed to seed map cache: ${error}`, 'server');
+				res.json({
+					error: true,
+					message: error?.message ?? 'could not seed map cache'
+				});
+			}
 		});
 
 		this.app.post('/api/checkTarget', async (req: any, res: any) => {
-			const response = await api.check_target(req.body.villageId, req.body.destVillageId, 4);
-			res.send(response);
+			const response = await api.check_target(req.body.villageId, req.body.destVillageId);
+			res.json(response);
 		});
 
 		this.app.post('/api/easyscout', (req: any, res: any) => {
@@ -292,7 +403,7 @@ class server {
 
 			kingbot.scout(list_name, village_id, amount, spy_mission);
 
-			res.send('success');
+			res.json('success');
 		});
 
 		this.app.post('/api/login', async (req: any, res: any) => {
@@ -313,22 +424,24 @@ class server {
 						logzio_enabled: database.get('account.logzio_enabled').value(),
 						logzio_host: database.get('account.logzio_host').value(),
 						logzio_token: database.get('account.logzio_token').value(),
-						user_agent: database.get('account.user_agent').value()
+						user_agent: database.get('account.user_agent').value(),
+						debug_enabled: database.get('account.debug_enabled').value()
 					}
 				};
 			}
 
 			if (action == 'save') {
-				const { logzio_enabled, logzio_host, logzio_token, user_agent } = req.body;
+				const { logzio_enabled, logzio_host, logzio_token, user_agent, debug_enabled } = req.body;
 				database.set('account.logzio_enabled', logzio_enabled).write();
 				database.set('account.logzio_host', logzio_host).write();
 				database.set('account.logzio_token', logzio_token).write();
 				database.set('account.user_agent', user_agent).write();
+				database.set('account.debug_enabled', debug_enabled).write();
 
 				response = { status: 'ok' };
 			}
 
-			res.send(response);
+			res.json(response);
 		});
 
 		this.app.post('/api/inactivefinder', async (req: any, res: any) => {
@@ -352,7 +465,7 @@ class server {
 					inactive_for, min_distance, max_distance
 				);
 
-				res.send(response);
+				res.json(response);
 				return;
 			}
 
@@ -360,11 +473,11 @@ class server {
 				const { farmlist, village } = data;
 				const response = await inactive_finder.add_inactive_player(farmlist, village);
 
-				res.send(response);
+				res.json(response);
 				return;
 			}
 
-			res.send({
+			res.json({
 				error: true,
 				message: 'could not identify action',
 				data: []
@@ -379,6 +492,7 @@ class server {
 					village_id,
 					find_15c,
 					find_9c,
+					find_7c,
 					only_free
 				} = data;
 
@@ -386,14 +500,15 @@ class server {
 					village_id,
 					find_15c,
 					find_9c,
+					find_7c,
 					only_free
 				);
 
-				res.send(response);
+				res.json(response);
 				return;
 			}
 
-			res.send({
+			res.json({
 				error: true,
 				message: 'could not identify action',
 				data: []
@@ -420,11 +535,11 @@ class server {
 					only_free
 				);
 
-				res.send(response);
+				res.json(response);
 				return;
 			}
 
-			res.send({
+			res.json({
 				error: true,
 				message: 'could not identify action',
 				data: []
@@ -445,11 +560,11 @@ class server {
 					nature_type
 				);
 
-				res.send(response);
+				res.json(response);
 				return;
 			}
 
-			res.send({
+			res.json({
 				error: true,
 				message: 'could not identify action',
 				data: []

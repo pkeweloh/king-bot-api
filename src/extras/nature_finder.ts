@@ -1,9 +1,10 @@
-import settings from '../settings';
-import api from '../api';
+import world_scan_proxy from '../world_scan_proxy';
 import { village } from '../gamedata';
-import { Inaturefinder, Imap_details, Ivillage } from '../interfaces';
-import { find_state_data } from '../util';
+import { Inaturefinder, Imap_details, Imap_region_tile, Ivillage } from '../interfaces';
+import { find_state_data, get_distance, sleep_ms } from '../util';
+import { get_oasis_type } from './map_helpers';
 import { nature_type } from '../data';
+import cache from '../cache';
 
 class nature_finder {
 
@@ -32,52 +33,39 @@ class nature_finder {
 		}
 		const { x, y } = found_village.coordinates;
 
-		// get actual map
-		const map_data = await api.get_map(settings.gameworld);
-		if (map_data.errors) {
-			return {
-				error: true,
-				message: map_data.errors[0]?.message,
-				data: null
-			};
-		}
+		const tiles = await world_scan_proxy.run();
+		const oases = this.discover_oases(tiles);
 
-		// find oases
-		const oases: any = this.discover_oases(map_data);
+		const nature: Inaturefinder[] = [];
+		for (const cell of oases) {
+			if (!cell.locationId)
+				continue;
 
-		// get map details
-		let map_details: Imap_details = null;
-		const params: Set<string> = new Set();
-		for (let cell of oases) {
-			if (Number(cell.id) == 0) continue;
-			params.add(village.map_details_ident + cell.id);
-		}
-		const map_details_data: any[] = await api.get_cache(Array.from(params));
+			const map_details = this.resolve_map_details(cell.locationId);
 
-		// filter and sort oases with nature
-		let nature = [];
-		for (let cell of oases) {
-			map_details = find_state_data(village.map_details_ident + cell.id, map_details_data);
 			if (!map_details)
 				continue;
 
 			if (!map_details.isOasis)
 				continue;
 
-			if (map_details.troops.units == null || Object.keys(map_details.troops.units).length == 0)
+			const troops: any = map_details.troops?.units;
+			if (!troops || Object.keys(troops).length === 0)
 				continue;
 
-			if (!Object.prototype.hasOwnProperty.call(map_details.troops.units, nature_type))
+			if (nature_type && !Object.prototype.hasOwnProperty.call(troops, nature_type))
 				continue;
 
-			const crop : Inaturefinder = {
-				id: cell.id,
+			const tile_distance = get_distance({ x, y }, { x: cell.x, y: cell.y });
+			const crop: Inaturefinder = {
+				id: cell.locationId,
 				x: cell.x,
 				y: cell.y,
 				oasis_type: map_details.oasisType,
-				nature: map_details.troops.units,
-				distance: this.calculate_distance(cell, x, y)
+				nature: troops,
+				distance: tile_distance
 			};
+
 			nature.push(crop);
 		}
 
@@ -86,22 +74,20 @@ class nature_finder {
 
 		return {
 			error: false,
-			message: `${ nature.length } found`,
+			message: `${nature.length} found`,
 			data: nature
 		};
 	}
 
-	discover_oases(map_data: any): any {
-		const oases = [];
-		for (let cell of map_data.map.cells) {
-			if (cell.oasis != '0')
-				oases.push(cell);
-		}
-		return oases;
+	discover_oases(tiles: Imap_region_tile[]): Imap_region_tile[] {
+		return tiles.filter(tile => get_oasis_type(tile) !== null);
 	}
 
-	calculate_distance(village: any, x: number, y: number) {
-		return Math.hypot(Number(village.x) - x, Number(village.y) - y);
+	private resolve_map_details(location_id: number): Imap_details | null {
+		const ident = village.map_details_ident + location_id;
+		const cache_data = cache.get([ident]);
+		if (!cache_data || cache_data.length === 0) return null;
+		return find_state_data(ident, cache_data);
 	}
 }
 

@@ -52,7 +52,7 @@ export interface Ifarmfinder {
 	isCity: boolean,
 	playerId: number,
 	player_name: string,
-	tribeId: tribe,
+	tribeId: tribe | null,
 	kingdomId: number,
 	kingdom_tag: string,
 	distance: number
@@ -62,7 +62,7 @@ export interface Icropfinder {
 	id: number,
 	x: number,
 	y: number,
-	is_15c: boolean,
+	crop_type: string,
 	bonus: number,
 	playerId: number,
 	player_name: string,
@@ -74,7 +74,7 @@ export interface Iresourcefinder {
 	id: number,
 	x: number,
 	y: number,
-	res_type: number,
+	res_type: string,
 	bonus: number,
 	playerId: number,
 	player_name: string,
@@ -600,4 +600,38 @@ export interface Icelebration {
 	duration: number
 	culturePoints: string
 	maxCount: number
+}
+
+export interface Imap_village_tile {
+	x: number
+	y: number
+	locationId: number
+	villageId: number
+	type?: string
+}
+
+export interface Imap_region_tile {
+	id: number
+	locationId: number
+	x: number
+	y: number
+	playerId: number | null
+	villageId: number | null
+	hasVillage: boolean
+	type: string | null
+	resType: string | null
+	landscape: string | null
+	owner: number | null
+	village?: any
+	oasis?: any
+	[key: string]: any
+}
+
+export interface Imap_parsed_tile {
+	x: number
+	y: number
+	locationId: number
+	villageId?: number
+	hasVillage: boolean
+	type?: string
 }

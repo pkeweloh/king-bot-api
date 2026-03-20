@@ -16,13 +16,6 @@ export default class RoberHideouts extends Component {
 		village_id: 0,
 		interval_min: 0,
 		interval_max: 0,
-		target_x: '',
-		target_y: '',
-		target_style: null,
-		target_help: null,
-		target_help_css: 'help',
-		robber1_village_id: 0,
-		robber2_village_id: 0,
 		t1: 0,
 		t2: 0,
 		t3: 0,
@@ -40,8 +33,6 @@ export default class RoberHideouts extends Component {
 		error_interval_min: false,
 		error_interval_max: false,
 		error_mission_type: false,
-		error_target_x: false,
-		error_target_y: false,
 		error_units: false
 	};
 
@@ -60,9 +51,6 @@ export default class RoberHideouts extends Component {
 	}
 
 	submit = async e => {
-		const robbersAreRegistered =
-			this.state.robber1_village_id != 0 ||
-			this.state.robber2_village_id != 0;
 		const unit_count =
 			Number(this.state.t1 == -1 ? 1 : this.state.t1) +
 			Number(this.state.t2 == -1 ? 1 : this.state.t2) +
@@ -81,14 +69,11 @@ export default class RoberHideouts extends Component {
 			error_interval_min: this.state.interval_min == 0,
 			error_interval_max: this.state.interval_max == 0,
 			error_mission_type: this.state.mission_type == 0,
-			error_target_x: !robbersAreRegistered,
-			error_target_y: !robbersAreRegistered,
 			error_units: isNaN(unit_count) || unit_count == 0
 		});
 
 		if (this.state.error_village || this.state.error_mission_type ||
 			this.state.error_interval_min || this.state.error_interval_max ||
-			this.state.error_target_x || this.state.error_target_y ||
 			this.state.error_units) return;
 
 		if (!this.can_siege() && this.state.mission_type == 47) {
@@ -152,75 +137,6 @@ export default class RoberHideouts extends Component {
 		}
 	};
 
-	set_robbers = async e => {
-		this.setState({
-			error_target_x: (this.state.target_x == ''),
-			error_target_y: (this.state.target_y == '')
-		});
-
-		if (this.state.error_target_x || this.state.error_target_y)
-			return;
-
-		let { target_help, target_help_css } = this.state;
-
-		const { target_x, target_y } = this.state;
-		var x = Number(target_x);
-		var y = Number(target_y);
-		const location_id = 536887296 + x + (y * 32768);
-		var location_response = await axios.post('/api/find', [`MapDetails: ${location_id}`]);
-		if (location_response.data.errors) {
-			target_help = `error: ${location_response.data.errors[0].message}`;
-			target_help_css = 'is-danger';
-			this.setState({
-				target_help, target_help_css,
-				error_target_x: true, error_target_y: true
-			});
-			return;
-		}
-
-		const location_data = location_response.data[0].data;
-		if (!location_data.hasNPC) {
-			target_help = lang.translate('lang_robber_hideouts_help_error_wrong');
-			target_help_css = 'is-danger';
-			this.setState({
-				target_help, target_help_css,
-				error_target_x: true, error_target_y: true
-			});
-			return;
-		}
-
-		var robber1_village_id = Number(location_data.hasNPC);
-		// try to find robber2 increasing the value
-		var robber2_village_id = Number(robber1_village_id) - 1; // negative add
-
-		var village_response = await axios
-			.post('/api/find', [`Village: ${robber2_village_id}`]);
-		if (!village_response.data[0].data) {
-			// if not found, try subtracting
-			robber2_village_id = robber1_village_id; // set correct orders
-			robber1_village_id = Number(robber1_village_id) + 1; // negative sub
-
-			village_response = await axios
-				.post('/api/find', [`Village: ${robber1_village_id}`]);
-			if (!village_response.data[0].data) {
-				target_help = lang.translate('lang_robber_hideouts_help_error_find');
-				target_help_css = 'is-danger';
-				this.setState({
-					target_help, target_help_css,
-					error_target_x: true, error_target_y: true
-				});
-				return;
-			}
-		}
-
-		target_help = lang.translate('lang_robber_hideouts_help_success');
-		target_help_css = 'is-success';
-		this.setState({ robber1_village_id, robber2_village_id, target_help, target_help_css });
-		setTimeout(async e => {
-			this.setState({ target_style: { display: 'none' } });
-		}, 3000 );
-	};
-
 	can_siege() {
 		var { units } = this.state;
 		var { t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11 } = this.state;
@@ -255,30 +171,9 @@ export default class RoberHideouts extends Component {
 	render(props) {
 		var { all_villages, units,
 			interval_min, interval_max,
-			target_x, target_y,
-			target_style, target_help, target_help_css,
 			village_id, mission_type,
 			t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11
 		} = this.state;
-
-		const robbersAreRegistered =
-			this.state.robber1_village_id != 0 || this.state.robber2_village_id != 0;
-
-		if (target_help_css == 'help' && robbersAreRegistered)
-			target_style = { display: 'none' };
-
-		var toggle_icon = classNames({
-			fas: true,
-			'fa-lg': true,
-			'fa-times-circle': !robbersAreRegistered,
-			'fa-check-circle': robbersAreRegistered,
-		});
-		var toggle_span = classNames({
-			icon: true,
-			'is-medium': true,
-			'has-text-danger': !robbersAreRegistered,
-			'has-text-success': robbersAreRegistered,
-		});
 
 		const input_class_min = classNames({
 			input: true,
@@ -290,18 +185,6 @@ export default class RoberHideouts extends Component {
 			input: true,
 			'is-radiusless': true,
 			'is-danger': this.state.error_interval_max,
-		});
-
-		const input_class_x = classNames({
-			input: true,
-			'is-radiusless': true,
-			'is-danger': this.state.error_target_x,
-		});
-
-		const input_class_y = classNames({
-			input: true,
-			'is-radiusless': true,
-			'is-danger': this.state.error_target_y,
 		});
 
 		const village_select_class = classNames({
@@ -346,37 +229,6 @@ export default class RoberHideouts extends Component {
 				<div className="columns">
 
 					<div className="column">
-
-						<label class="label">
-							<span>{ props.lang_robber_hideouts_registered }</span>
-							<span class={ toggle_span }>
-								<i class={ toggle_icon }></i>
-							</span>
-						</label>
-
-						<DoubleInput
-							label = { props.lang_common_target }
-							placeholder1 = { 'x' }
-							placeholder2 = { 'y' }
-							value1 = { target_x }
-							value2 = { target_y }
-							onChange1 = { e => this.setState({ target_x: e.target.value }) }
-							onChange2 = { e => this.setState({ target_y: e.target.value }) }
-							class1 = { input_class_x }
-							class2 = { input_class_y }
-							parent_style = { target_style }
-							button = { <Button
-								action = { props.lang_robber_hideouts_button_setrobbers }
-								className = 'is-success'
-								onClick = { this.set_robbers }
-								icon = 'fa-campground' /> }
-							help = {
-								<Help
-									className = { target_help_css }
-									content = { target_help ?? props.lang_robber_hideouts_help_default }
-								/> }
-							icon = 'fa-map-marker-alt'
-						/>
 
 						<DoubleInput
 							label = { props.lang_common_interval }

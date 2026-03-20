@@ -30,7 +30,7 @@ export default class NatureTable extends Component {
 			columnDefs: [
 				{ targets: [2], orderable: false }
 			],
-			pageLength: 25,
+			pageLength: 10,
 			lengthChange: false,
 			language: {
 				url: '/i18n/' + lang.currentLanguage + '.json'
@@ -38,6 +38,7 @@ export default class NatureTable extends Component {
 		});
 		if (jQuery('table').length > 1)
 			jQuery('table')[1].remove();
+
 	}
 
 	componentDidMount() {

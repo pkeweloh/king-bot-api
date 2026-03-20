@@ -48,14 +48,14 @@ class logger {
 				format: LOG_FORMAT,
 				filename: settings.assets_folder + '/api-%DATE%.log',
 				datePattern: 'YYYY-MM-DD',
-				maxFiles: '14d'
+				maxFiles: '7d'
 			}),
 			new DailyRotateFile({
 				level: 'debug',
 				format: winston.format.combine(DEBUG_FILTER(), LOG_FORMAT),
 				filename: settings.assets_folder + '/debug-%DATE%.log',
 				datePattern: 'YYYY-MM-DD',
-				maxFiles: '14d'
+				maxFiles: '3d'
 			})
 		];
 

@@ -84,6 +84,7 @@ export abstract class feature_single implements feature {
 	}
 
 	stop(): void {
+		this.running = false;
 		this.set_options({ ...this.get_options(), run: false });
 		this.save();
 	}
@@ -104,7 +105,13 @@ export abstract class feature_single implements feature {
 					return null;
 				}
 				const nextDelay = await this.run();
-				return nextDelay || 60; // Default to 1 minute if null or 0 returned but still running
+				if (nextDelay === null) {
+					this.running = false;
+					this.set_options({ ...this.get_options(), run: false });
+					this.save();
+					return null;
+				}
+				return nextDelay;
 			}
 		};
 
@@ -341,6 +348,7 @@ export abstract class feature_item {
 	}
 
 	stop(): void {
+		this.running = false;
 		this.set_options({ ...this.get_options(), run: false });
 		scheduler.removeTask(this.get_options().uuid);
 		logger.info(`task [${this.params.ident}] stopped`, this.params.name);
@@ -374,6 +382,12 @@ export abstract class feature_item {
 					return null;
 				}
 				const nextDelay = await this.run();
+				if (nextDelay === null) {
+					this.running = false;
+					this.set_options({ ...this.get_options(), run: false });
+					this.save();
+					return null;
+				}
 				return nextDelay || 60;
 			}
 		};

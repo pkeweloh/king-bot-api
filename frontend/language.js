@@ -16,6 +16,14 @@ const languages = {
 		lang_navbar_language: 'language',
 		lang_navbar_search: 'search features',
 
+		lang_map_cache_seed_button: 'seed map cache',
+		lang_map_cache_seed_required: 'please seed the map cache before searching',
+		lang_map_cache_seed_error: 'could not seed the map cache',
+		lang_map_cache_seeded_at: 'map cache seeded at',
+		lang_map_cache_seed_not_triggered: 'map cache has not been seeded',
+		lang_map_cache_cells: 'map cells',
+		lang_map_cache_regions: 'map regions',
+
 		lang_feature_finish_earlier: 'instant finish',
 		lang_feature_hero: 'auto adventure',
 		lang_feature_farming: 'send farmlists',
@@ -74,6 +82,8 @@ const languages = {
 		lang_table_farmlist: 'farmlist',
 		lang_table_village: 'village',
 		lang_table_remove: 'remove',
+		lang_table_searching: 'searching...',
+		lang_table_no_results: 'no results found',
 		lang_table_duration: 'duration',
 		lang_table_distance: 'distance',
 		lang_table_population: 'population',
@@ -118,13 +128,6 @@ const languages = {
 
 		lang_farmlist_add: 'add farmlist',
 		lang_farmlist_losses: 'move farms with losses to',
-
-		lang_robber_hideouts_registered: 'robbers registered',
-		lang_robber_hideouts_button_setrobbers: 'set robbers',
-		lang_robber_hideouts_help_default: 'fill x and y coordinates from any robber hideout',
-		lang_robber_hideouts_help_error_wrong: 'error: not a robber hideout',
-		lang_robber_hideouts_help_error_find: 'error: unable to find robber hideout!',
-		lang_robber_hideouts_help_success: 'successfully registered robber hideouts!',
 
 		lang_timed_send_arrival: 'arrival date / time',
 		lang_timed_send_button_settarget: 'set target',
@@ -180,6 +183,8 @@ const languages = {
 		lang_settings_logzio_enabled: 'enable logz.io',
 		lang_settings_logzio_host: 'logz.io host',
 		lang_settings_logzio_token: 'logz.io token',
+		lang_settings_debug: 'debug',
+		lang_settings_debug_enabled: 'enable debug logging',
 
 		lang_login_title: 'login',
 		lang_login_change_login: 'change login',
@@ -363,6 +368,14 @@ const languages = {
 		lang_navbar_language: 'idioma',
 		lang_navbar_search: 'buscar funciones',
 
+		lang_map_cache_seed_button: 'actualizar caché del mapa',
+		lang_map_cache_seed_required: 'debes actualizar la caché del mapa antes de buscar',
+		lang_map_cache_seed_error: 'no se pudo actualizar la caché del mapa',
+		lang_map_cache_seeded_at: 'caché del mapa actualizada el',
+		lang_map_cache_seed_not_triggered: 'la caché del mapa aún no ha sido actualizada',
+		lang_map_cache_cells: 'celdas del mapa',
+		lang_map_cache_regions: 'regiones del mapa',
+
 		lang_feature_finish_earlier: 'finalizar instantáneo',
 		lang_feature_hero: 'auto aventura',
 		lang_feature_farming: 'enviar lista de vacas',
@@ -421,6 +434,8 @@ const languages = {
 		lang_table_farmlist: 'lista de vacas',
 		lang_table_village: 'aldea',
 		lang_table_remove: 'eliminar',
+		lang_table_searching: 'buscando...',
+		lang_table_no_results: 'no se han encontrado resultados',
 		lang_table_duration: 'duración',
 		lang_table_distance: 'distancia',
 		lang_table_population: 'población',
@@ -465,13 +480,6 @@ const languages = {
 
 		lang_farmlist_add: 'añadir lista',
 		lang_farmlist_losses: 'mover vacas con perdidas a',
-
-		lang_robber_hideouts_registered: 'ladrones registrados',
-		lang_robber_hideouts_button_setrobbers: 'registrar',
-		lang_robber_hideouts_help_default: 'rellena las coordenadas x e y de cualquier escondite',
-		lang_robber_hideouts_help_error_wrong: 'error: no es un escondite de ladrones',
-		lang_robber_hideouts_help_error_find: 'error: imposible encontrar escondite de ladrones',
-		lang_robber_hideouts_help_success: '¡escondite de ladrones registrados con éxito!',
 
 		lang_timed_send_arrival: 'fecha / hora de llegada',
 		lang_timed_send_button_settarget: 'registrar',
@@ -527,6 +535,8 @@ const languages = {
 		lang_settings_logzio_enabled: 'activar logz.io',
 		lang_settings_logzio_host: 'logz.io host',
 		lang_settings_logzio_token: 'logz.io token',
+		lang_settings_debug: 'depuración',
+		lang_settings_debug_enabled: 'activar logs de depuración',
 
 		lang_login_title: 'iniciar sesión',
 		lang_login_change_login: 'cambiar login',
@@ -712,6 +722,14 @@ const languages = {
 		lang_navbar_language: 'sprache',
 		lang_navbar_search: 'features suchen',
 
+		lang_map_cache_seed_button: 'karten-cache aktualisieren',
+		lang_map_cache_seed_required: 'bitte zuerst den karten-cache aktualisieren',
+		lang_map_cache_seed_error: 'karten-cache konnte nicht aktualisiert werden',
+		lang_map_cache_seeded_at: 'karten-cache zuletzt aktualisiert am',
+		lang_map_cache_seed_not_triggered: 'karten-cache wurde noch nicht aktualisiert',
+		lang_map_cache_cells: 'karten-zellen',
+		lang_map_cache_regions: 'karten-regionen',
+
 		lang_feature_finish_earlier: 'sofortige fertigstellung',
 		lang_feature_hero: 'autoabenteuer',
 		lang_feature_farming: 'farmlisten schicken',
@@ -774,6 +792,8 @@ const languages = {
 		lang_table_farmlist: 'farmliste',
 		lang_table_village: 'dorf',
 		lang_table_remove: 'entfernen',
+		lang_table_searching: 'suche läuft...',
+		lang_table_no_results: 'keine Ergebnisse gefunden',
 		lang_table_duration: 'laufzeit',
 		lang_table_distance: 'distanz',
 		lang_table_population: 'bevölkerung',
@@ -818,13 +838,6 @@ const languages = {
 
 		lang_farmlist_add: 'farmlist hinzufügen',
 		lang_farmlist_losses: 'sortiere farmen mit verlusten zu',
-
-		lang_robber_hideouts_registered: 'räuber registriert',
-		lang_robber_hideouts_button_setrobbers: 'räuber setzen',
-		lang_robber_hideouts_help_default: 'x- und y-koordinaten von jedem räuberversteck eingeben',
-		lang_robber_hideouts_help_error_wrong: 'fehlermeldung: kein räuberversteck',
-		lang_robber_hideouts_help_error_find: 'fehlermeldung: räuberversteck nicht gefunden!',
-		lang_robber_hideouts_help_success: 'erfolgreich räuberversteck registriert!',
 
 		lang_timed_send_arrival: 'ankunftsdatum / -zeit',
 		lang_timed_send_button_settarget: 'ziel setzen',
@@ -880,6 +893,8 @@ const languages = {
 		lang_settings_logzio_enabled: 'aktiviere logz.io',
 		lang_settings_logzio_host: 'logz.io host',
 		lang_settings_logzio_token: 'logz.io token',
+		lang_settings_debug: 'debug',
+		lang_settings_debug_enabled: 'debug protokollierung aktivieren',
 
 		lang_login_title: 'einloggen',
 		lang_login_change_login: 'login ändern',

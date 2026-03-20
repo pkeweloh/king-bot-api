@@ -1,11 +1,31 @@
-const kingbot = require('./dist').default;
-const settings = require('./dist/settings').default;
+const path = require('path');
+const express = require('express');
 
 // http://electron.atom.io/docs/api
 const { app, BrowserWindow, Tray, Menu } = require('electron');
 
-const path = require('path');
-const express = require('express');
+const ensurePuppeteerExecutableIsPackaged = () => {
+	if (process.env.PUPPETEER_EXECUTABLE_PATH) return;
+	try {
+		const puppeteer = require('puppeteer');
+		let executablePath = puppeteer.executablePath();
+		if (!executablePath) return;
+		const packagedSegment = `${path.sep}app.asar${path.sep}`;
+		if (executablePath.includes(packagedSegment)) {
+			executablePath = executablePath.replace(packagedSegment, `${path.sep}app.asar.unpacked${path.sep}`);
+		} else if (executablePath.includes('app.asar')) {
+			executablePath = executablePath.replace('app.asar', 'app.asar.unpacked');
+		}
+		process.env.PUPPETEER_EXECUTABLE_PATH = executablePath;
+	} catch (error) {
+		console.warn('Could not initialize Puppeteer executable path:', error?.message ?? error);
+	}
+};
+
+ensurePuppeteerExecutableIsPackaged();
+
+const kingbot = require('./dist').default;
+const settings = require('./dist/settings').default;
 
 let server = express();
 let port = 3001;

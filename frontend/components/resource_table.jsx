@@ -22,12 +22,14 @@ export default class ResourceTable extends Component {
 
 	table = null;
 
-	createTable() {
-		if (this.table)
+	createTable(options = {}) {
+		if (this.table) {
 			this.table.destroy();
+			this.table = null;
+		}
 		this.table = jQuery('#table').DataTable({
 			dom: 'ritp',
-			pageLength: 25,
+			pageLength: 10,
 			lengthChange: false,
 			language: {
 				url: '/i18n/' + lang.currentLanguage + '.json'
@@ -35,6 +37,13 @@ export default class ResourceTable extends Component {
 		});
 		if (jQuery('table').length > 1)
 			jQuery('table')[1].remove();
+
+		if (options.order && options.order.length)
+			this.table.order(options.order);
+		if (typeof options.page === 'number')
+			this.table.page(options.page);
+		this.table.draw(false);
+
 	}
 
 	componentDidMount() {
@@ -42,12 +51,15 @@ export default class ResourceTable extends Component {
 	}
 
 	componentDidUpdate(prevProps) {
-		if (this.props.content.length !== prevProps.content.length)
-			this.createTable();
+		if (this.props.content !== prevProps.content) {
+			const page = this.table ? this.table.page.info().page : 0;
+			const order = this.table ? this.table.order() : [];
+			this.createTable({ page, order });
+		}
 	}
 
 	shouldComponentUpdate(nextProps) {
-		return this.props.content.length !== nextProps.content.length;
+		return this.props.content !== nextProps.content;
 	}
 
 	render(props) {
@@ -72,6 +84,7 @@ export default class ResourceTable extends Component {
 		);
 	}
 }
+
 
 class Resource extends Component {
 
@@ -115,14 +128,20 @@ class Resource extends Component {
 				<td style={ rowStyle }>
 					{ bonus }%
 				</td>
-				<td style={ rowCenterStyle }  title={ `playerId: ${playerId}` }>
-					{ free &&
-					<a class="has-text-black">
-						<span class='icon is-medium'>
-							<i class='fas fa-lg fa-check'></i>
-						</span>
-					</a>
-					|| player_name }
+				<td style={ rowCenterStyle } title={ `playerId: ${playerId}` }>
+					<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+						{ free ? (
+							<a class="has-text-black">
+								<span class='icon is-medium'>
+									<i class='fas fa-lg fa-check'></i>
+								</span>
+							</a>
+						) : (
+							<span style={{ minWidth: '2rem', display: 'inline-block' }}>
+								{ player_name ?? '-' }
+							</span>
+						) }
+					</div>
 				</td>
 			</tr>
 		);

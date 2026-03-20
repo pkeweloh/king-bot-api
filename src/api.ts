@@ -1,18 +1,18 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import createHttpsProxy from 'https-proxy-agent';
-import { clash_obj, get_date, get_ms, camelcase_to_string, get_random_string, get_random_int } from './util';
+import { clash_obj, get_ms, camelcase_to_string, get_random_string } from './util';
 import manage_login from './login';
 import settings, { Icredentials } from './settings';
 import database from './database';
 import { Iresources, Iunits } from './interfaces';
-import { default_Iunits, building_types } from './data';
-import { getClientId } from './client_id_extractor';
+import { default_Iunits } from './data';
 import logger from './logger';
-import { SessionManager } from './session_manager';
+import cache from './cache';
+import BrowserService from './browser';
+
 
 class api {
 	private axios: AxiosInstance;
-	private sessionManager = new SessionManager();
 	private readonly LOBBY_ENDPOINT = 'https://lobby.kingdoms.com/api/index.php';
 	private readonly BROWSER_HEADERS = {
 		'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,text/plain,*/*;q=0.8',
@@ -33,7 +33,6 @@ class api {
 	msid: string = '';
 	clientId: string = '';
 	playerId: string = '';
-	is_busy = false;
 
 	init(proxy: string) {
 		const options: AxiosRequestConfig = {};
@@ -51,7 +50,7 @@ class api {
 		const user_agent = database.get('account.user_agent').value();
 		this.axios.defaults.headers.common['User-Agent'] = user_agent;
 
-		// Set static browser-like headers
+		// set static browser-like headers
 		for (const [key, value] of Object.entries(this.BROWSER_HEADERS)) {
 			this.axios.defaults.headers.common[key] = value as string;
 		}
@@ -86,7 +85,7 @@ class api {
 			if (playerId && playerId !== this.playerId) {
 				this.playerId = playerId;
 				database.set('account.playerId', playerId).write();
-				logger.debug(`player id synced: ${playerId}`, 'sync_player_state');
+				logger.debug(`player id synced: ${playerId}`, 'api');
 			}
 		}
 	}
@@ -124,25 +123,20 @@ class api {
 	}
 
 	async refresh_token() {
-		if (!this.is_busy) {
-			this.is_busy = true;
-			logger.info('refresh token...', 'api');
+		logger.info('refresh token...', 'api');
 
-			// read credentials
-			let cred: Icredentials = settings.read_credentials();
-			if (!cred) {
-				logger.error('credentials not found', 'api');
-				return;
-			}
-
-			// log back in
-			await this.login(cred.email, cred.password, cred.gameworld, cred.sitter_type, cred.sitter_name);
-			this.is_busy = false;
+		// read credentials
+		let cred: Icredentials = settings.read_credentials();
+		if (!cred) {
+			logger.error('credentials not found', 'api');
+			return;
 		}
+
+		// log back in
+		await this.login(cred.email, cred.password, cred.gameworld, cred.sitter_type, cred.sitter_name);
 	}
 
 	async login(email: string, password: string, gameworld: string, sitter_type: string, sitter_name: string) {
-		this.sessionManager.reset();
 		this.clientId = await manage_login(this.axios, email, password, gameworld, sitter_type, sitter_name);
 	}
 
@@ -166,19 +160,18 @@ class api {
 			logger.error('failed to extract session link from gameworld login response', 'api');
 			throw new Error('Failed to extract session link from gameworld login response.');
 		}
-		const session = sessionLink.substring(sessionLink.lastIndexOf('=') + 1);
+		const sessionMatch = sessionLink.match(/[?&]session=([^&]+)/);
+		const session = sessionMatch ? sessionMatch[1] : sessionLink.substring(sessionLink.lastIndexOf('=') + 1);
 
-		this.apply_gameworld_state(gameworld, session, cookies, msid);
+		this.apply_gameworld_state(gameworld, session, msid, cookies);
 
 		return { session, cookies };
 	}
 
-	// here we check if the session is still valid by doing a ping
-	// (this extra call shouldn't be done, but with ping it might still go unnoticed)
 	async validate_gameworld_session(): Promise<boolean> {
 		try {
-			const data: any[] = await this.ping();
-			return data && Array.isArray(data);
+			const data: any = await this.get_cache(['Gameworld:'], { force: true, skip_refresh: true });
+			return data && !data.errors;
 		} catch { return false; }
 	}
 
@@ -204,8 +197,48 @@ class api {
 		return await this.post('getAll', 'player', { deviceDimension: '1920:1080' });
 	}
 
-	async get_cache(params: string[]): Promise<any[]> {
-		return await this.post('get', 'cache', { names: params });
+	async get_browser_cache(params: string[]): Promise<any[]> {
+		const browser_data = await BrowserService.getCache(params);
+		if (browser_data && browser_data.length === params.length) {
+			// sync browser data to local cache
+			cache.sync_payload(browser_data);
+			return this.merge_data({ cache: browser_data });
+		}
+		return null;
+	}
+
+	get_local_cache(params: string[]): any[] {
+		const local = cache.get(params);
+		if (local.length > 0 && local.length === params.length) {
+			return this.merge_data({ cache: local });
+		}
+		return null;
+	}
+
+	async get_cache(params: string[], options?: { force?: boolean; skip_refresh?: boolean; local_cache?: boolean }): Promise<any[]> {
+		const {
+			force = false,
+			skip_refresh = false,
+			local_cache = false
+		} = options ?? {};
+		if (!force) {
+			// browser cache
+			const browser_data = await this.get_browser_cache(params);
+			if (browser_data !== null) {
+				return browser_data;
+			}
+
+			// local cache
+			if (local_cache) {
+				const local = this.get_local_cache(params);
+				if (local !== null) {
+					return local;
+				}
+			}
+		}
+
+		// fetch from API
+		return await this.post('get', 'cache', { names: params }, skip_refresh);
 	}
 
 	// TODO better program this api call
@@ -231,7 +264,8 @@ class api {
 			rankingType: 'ranking_WorldWonder'
 		};
 
-		return await this.post('getRanking', 'ranking', params);
+		//return await this.post('getRanking', 'ranking', params);
+		return []; // TODO: temporary stub: return empty array instead of hitting API
 	}
 
 	async get_robber_villages_amount(kingdomId: number = 0): Promise<any> {
@@ -316,10 +350,11 @@ class api {
 
 	}
 
-	async check_target(villageId: number, destVillageId: number, movementType: number,
-		redeployHero: boolean = false, selectedUnits: Iunits = default_Iunits): Promise<any> {
+	async check_target(villageId: number, destVillageId: number, destVillageName: string = undefined, movementType: number = 5,
+		selectedUnits: Iunits = default_Iunits, redeployHero: boolean = false): Promise<any> {
 		const params = {
 			destVillageId,
+			destVillageName,
 			villageId,
 			movementType,
 			redeployHero,
@@ -454,6 +489,14 @@ class api {
 		return this.merge_data(response.data);
 	}
 
+	async get_heatmap_maximums(): Promise<any> {
+		return await this.post('getHeatmapMaximums', 'map', {});
+	}
+
+	async get_by_region_ids(regionIdCollection: { [layer: number]: number[] }): Promise<any> {
+		return await this.post('getByRegionIds', 'map', { regionIdCollection });
+	}
+
 	async get_duration_to_closest_village_with_influence(villageId: number): Promise<any> {
 		const params = {
 			villageId
@@ -474,31 +517,11 @@ class api {
 		return await this.post('useItem', 'hero', params);
 	}
 
-	async ping(): Promise<any> {
-		const timestamp = get_ms();
-		const params = this.sessionManager.getPingParams(timestamp);
-
-		const response = await this.post('ping', 'player', params, timestamp);
-
-		const refresh = params.cnt > 1; // No refresh for first ping
-		if (refresh && response.data?.error?.type == 'ClientException' &&
-			response.data?.error?.message == 'Authentication failed') {
-			logger.error('authentication failed, refreshing token... ', 'ping.player');
-			await this.refresh_token();
-		}
-
-		this.sessionManager.updateFromPingResponse(response?.data);
-
-		return response;
-	}
-
-	async post(action: string, controller: string, params: object, timestamp?: number): Promise<any> {
+	async post(action: string, controller: string, params: object, skip_refresh: boolean = false): Promise<any> {
 		const session = this.session;
 		const clientId = this.clientId;
-
-		const isPing = action === 'ping' && controller === 'player';
-		const finalTimestamp = timestamp || get_ms();
-		const url = `?c=${controller}&a=${action}${this.playerId ? `&p${this.playerId}` : ''}&t${finalTimestamp}`;
+		const timestamp = get_ms();
+		const url = `?c=${controller}&a=${action}${this.playerId ? `&p${this.playerId}` : ''}&t${timestamp}`;
 
 		logger.debug(`post /${url}: ${JSON.stringify(params)}`, `${controller}.${action}`);
 
@@ -511,10 +534,7 @@ class api {
 		};
 		let response: any = await this.axios.post(url, payload);
 
-		// update session state for future pings
-		this.sessionManager.registerInteraction(finalTimestamp, !isPing);
-
-		if (!isPing && response.data?.error?.type == 'ClientException' &&
+		if (!skip_refresh && response.data?.error?.type == 'ClientException' &&
 			response.data?.error?.message == 'Authentication failed') {
 			logger.error('authentication failed, refreshing token and retrying... ', `${controller}.${action}`);
 			await this.refresh_token();
@@ -531,6 +551,12 @@ class api {
 				}]
 			};
 		response.data = this.handle_errors(response.data, `${controller}.${action}`);
+
+		// sync cache if present in response
+		if (response.data?.cache) {
+			cache.sync_payload(response.data.cache);
+		}
+
 		return this.merge_data(response.data);
 	}
 

@@ -17,6 +17,8 @@ class settings {
 	sitter_name: string;
 	avatar_name: string;
 	ip: string;
+	screen_width: number = 1920;
+	screen_height: number = 1080;
 
 	async init(): Promise<void> {
 		try {

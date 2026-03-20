@@ -1,18 +1,36 @@
-import { find_state_data, sleep, get_random_int, get_diff_time } from '../util';
+import { find_state_data, get_random_int, get_diff_time, async_step, random_human_mistake, sleep_ms } from '../util';
 import { Iunits, Ihero, Ivillage, Imap_details, Itroops_collection } from '../interfaces';
 import { feature_collection, feature_item, Ioptions } from './feature';
 import { hero, village, troops } from '../gamedata';
 import { hero_status, mission_types, troops_status, troops_type } from '../data';
 import api from '../api';
 import logger from '../logger';
+import map_scanner from '../map_scanner';
+
+export interface IHumanBehaviorProfile {
+	action_selection_delay: [number, number];		// right click + select attack
+	open_attack_delay: [number, number];			// attack window appears
+	mission_selection_delay: [number, number];		// selects mission type
+	base_troop_selection_delay: [number, number];	// starts selecting troops
+	per_unit_type_delay: [number, number];			// extra hesitation per selected unit type
+	confirmation_delay: [number, number];			// send confirmation
+}
+
+// default profile for robber attacks
+export const default_robber_profile: IHumanBehaviorProfile = {
+	action_selection_delay: [2000, 5000],           // 2-5 sec
+	open_attack_delay: [1000, 2500],       			// 1-2.5 sec
+	mission_selection_delay: [2000, 6000],      	// 2-6 sec
+	base_troop_selection_delay: [30000, 60000], 	// 30-60 sec
+	per_unit_type_delay: [3000, 5000],        		// +3-5 sec per selected unit type
+	confirmation_delay: [3000, 8000]            	// 3-8 sec
+};
 
 interface Ioptions_robber_hideouts extends Ioptions {
 	village_name: string,
 	village_id: number,
 	interval_min: number,
 	interval_max: number,
-	robber1_village_id: number,
-	robber2_village_id: number,
 	mission_type: mission_types,
 	mission_type_name: string,
 	t1: number,
@@ -44,8 +62,6 @@ class robber_hideouts extends feature_collection {
 			village_id: 0,
 			interval_min: 0,
 			interval_max: 0,
-			robber1_village_id: 0,
-			robber2_village_id: 0,
 			mission_type: 0 as any,
 			mission_type_name: null,
 			t1: 0,
@@ -66,9 +82,10 @@ class robber_hideouts extends feature_collection {
 class robber_feature extends feature_item {
 	options: Ioptions_robber_hideouts;
 
-	sleep_time: number;
-	send_hero: boolean;
-	send_artillery: boolean;
+	private sleep_time: number;
+	private send_hero: boolean;
+	private send_artillery: boolean;
+	private behavior_profile: IHumanBehaviorProfile = default_robber_profile;
 
 	set_options(options: Ioptions_robber_hideouts): void {
 		const { uuid, run, error,
@@ -76,8 +93,6 @@ class robber_feature extends feature_item {
 			village_id,
 			interval_min,
 			interval_max,
-			robber1_village_id,
-			robber2_village_id,
 			mission_type,
 			mission_type_name,
 			t1,
@@ -101,8 +116,6 @@ class robber_feature extends feature_item {
 			village_id,
 			interval_min,
 			interval_max,
-			robber1_village_id,
-			robber2_village_id,
 			mission_type,
 			mission_type_name,
 			t1,
@@ -155,22 +168,23 @@ class robber_feature extends feature_item {
 		this.send_hero = t11 > 0;
 		this.send_artillery = t7 > 0 || t8 > 0;
 
-		const robber: Ivillage = await this.check_robber();
-		if (robber) {
-			let troops_busy: boolean = await this.check_troops();
-			if (troops_busy) {
-				logger.info('send aborted because the troops are busy right now', this.params.name);
-			} else {
-				await this.send_troops(robber);
-				if (this.options.error) return null;
-				await this.check_troops();
-			}
-
-			return this.sleep_time > 0 ? this.sleep_time : get_random_int(interval_min, interval_max);
-		} else {
+		const robber = await this.check_robber();
+		if (!robber) {
 			logger.info('no robber hideouts at this time, will check again later', this.params.name);
 			return get_random_int(interval_min, interval_max);
 		}
+
+		const [cellId, robber_village] = robber;
+
+		let in_transit: boolean = await this.check_troops(village_id, cellId, robber_village.villageId);
+		if (in_transit) {
+			logger.info('send aborted because the troops are busy right now', this.params.name);
+		} else {
+			await this.send_troops(robber_village);
+			if (this.options.error) return null;
+		}
+
+		return this.sleep_time > 0 ? this.sleep_time : get_random_int(interval_min, interval_max);
 	}
 
 	async send_troops(robber_village: Ivillage): Promise<void> {
@@ -199,7 +213,6 @@ class robber_feature extends feature_item {
 				break;
 		}
 
-		// TODO: adding a unit index of -1 will send all units with max number
 		const units: Iunits = {
 			1: Number(t1),
 			2: Number(t2),
@@ -218,7 +231,7 @@ class robber_feature extends feature_item {
 		if (units[1] == 0 && units[2] == 0 && units[3] == 0 && units[4] == 0 &&
 			units[5] == 0 && units[6] == 0 && units[7] == 0 && units[8] == 0 &&
 			units[9] == 0 && units[10] == 0 && units[11] == 0) {
-			logger.error(`stop robber hideouts on village ${village_name} ` +
+			logger.error(`stopping robber hideouts on village ${village_name} ` +
 				'because no units have been defined to send', this.params.name);
 			this.options.error = true;
 			return;
@@ -281,8 +294,29 @@ class robber_feature extends feature_item {
 			not_sent += ' and not needed artillery';
 		}
 
+		// attack window opens on selected attack
+		await async_step(() =>
+			api.check_target(village_id, robber_village.position), ...this.behavior_profile.open_attack_delay); // 1-2.5 sec
+		let extra = random_human_mistake('minor'); if (extra) await sleep_ms(extra); // minor micro hesitation
+
+		// selects mission type
+		await async_step(() => api.check_target(village_id, robber_village.position, robber_village.name, mission_type, units),
+			...this.behavior_profile.mission_selection_delay); // 2-6 sec default
+		extra = random_human_mistake('medium'); if (extra) await sleep_ms(extra); // medium micro hesitation
+
+		// starts selecting troops
+		await async_step(
+			() => api.check_target(village_id, robber_village.position, robber_village.name, mission_type, units), // with extra hesitation per selected unit type
+			this.behavior_profile.base_troop_selection_delay[0] + Object.values(units).filter(v => v > 0).length * this.behavior_profile.per_unit_type_delay[0],
+			this.behavior_profile.base_troop_selection_delay[1] + Object.values(units).filter(v => v > 0).length * this.behavior_profile.per_unit_type_delay[1]
+		); // 30-60 sec + per unit type
+		extra = random_human_mistake('minor'); if (extra) await sleep_ms(extra); // minor micro hesitation during selection
+		extra = random_human_mistake('medium', { chance: 0.1 }); if (extra) await sleep_ms(extra); // occasional medium micro hesitation
+
 		// send units
-		var response: any = await api.send_units(village_id, robber_village.position, units, mission_type);
+		const response = await async_step(() => api.send_units(village_id, robber_village.position, units, mission_type),
+			...this.behavior_profile.confirmation_delay); // 3-8 sec default
+		extra = random_human_mistake('minor'); if (extra) await sleep_ms(extra); // minor hesitation before confirming
 
 		// check errors
 		if (response.errors) {
@@ -291,132 +325,138 @@ class robber_feature extends feature_item {
 			return;
 		}
 
+		// inspects moving troops and sets sleep time as needed
+		const troops_collection: Itroops_collection[] = find_state_data(troops.collection_moving_ident + village_id, response);
+		this.sleep_time = this.get_max_movement_time(village_id, robber_village.position, robber_village.villageId, troops_collection);
+
 		logger.info(`sent ${mission_type_name} from ${village_name} to ${robber_village.name}${not_sent}`, this.params.name);
 		return;
 	}
 
-	async check_robber(): Promise<Ivillage> {
-		const { robber1_village_id, robber2_village_id } = this.options;
-
-		// get available robber villages amount (kingdom: 0 = robber hideouts)
-		const response = await api.get_robber_villages_amount(0);
-		if (!response)
-			return null;
-		const amount: number = response.data;
-		if (amount == 0)
-			return null;
-
-		// get robber villages
-		const village1_ident = village.ident + robber1_village_id;
-		const village2_ident = village.ident + robber2_village_id;
-		const villages_data: any[] = await api.get_cache([village1_ident, village2_ident]);
-		const robber1_village: Ivillage = find_state_data(village1_ident, villages_data);
-		if (robber1_village == null) {
-			logger.error('could not get village data of robber 1', this.params.name);
+	private async check_robber(): Promise<[number, Ivillage] | null> {
+		// get own village to scan around it
+		const { village_id, village_name } = this.options;
+		const villages_data = await village.get_own();
+		const own_village = village.find(village_id, villages_data);
+		if (!own_village) {
+			logger.error(`could not find village ${village_name}`, this.params.name);
+			this.options.error = true;
 			return null;
 		}
-		const robber2_village: Ivillage = find_state_data(village2_ident, villages_data);
-		if (robber2_village == null) {
-			logger.error('could not get village data of robber 2', this.params.name);
+		const x = Number(own_village.coordinates.x);
+		const y = Number(own_village.coordinates.y);
+
+		// finds robbers using event-driven reactive scanning
+		const robbers = await this.find_robbers(x, y);
+
+		if (robbers.length === 0) {
 			return null;
 		}
 
-		// get robber map positions
-		const position1_ident = village.map_details_ident + robber1_village.position;
-		const position2_ident = village.map_details_ident + robber2_village.position;
-		const position_data: any[] = await api.get_cache([position1_ident, position2_ident]);
-		const robber1: Imap_details = find_state_data(position1_ident, position_data);
-		if (robber1 == null) {
-			logger.error('could not get position data of robber 1', this.params.name);
+		const robber_tile = robbers[0];
+		const cell_id: number = robber_tile.locationId || robber_tile.id;
+
+		// get map position data: mouse over → map details loaded
+		const position_ident = village.map_details_ident + cell_id;
+		const position_data: any[] = await api.get_cache([position_ident]);
+		const robber: Imap_details = find_state_data(position_ident, position_data);
+		if (robber == null)
 			return null;
-		}
-		const robber2: Imap_details = find_state_data(position2_ident, position_data);
-		if (robber2 == null) {
-			logger.error('could not get position data of robber 2', this.params.name);
+
+		// if the robber not longer exists
+		if (robber.hasNPC == 0 || robber.npcInfo.troops == null)
 			return null;
+
+		// the robber is valid, but if there are no units left
+		if (
+			robber.npcInfo.troops.units == null ||
+			Object.keys(robber.npcInfo.troops.units).length == 0
+		) {
+			this.send_hero = false;
+			this.send_artillery = false;
 		}
 
-		// return any that still has robbers
-		if (robber1.hasNPC != 0 && robber1.npcInfo.troops != null) {
+		// get village data: right-click for village tooltip
+		let extra = random_human_mistake('minor'); if (extra) await sleep_ms(extra); // minor micro hesitation
+		const village_ident = village.ident + robber.npcInfo.villageId;
+		const village_data: any[] = await async_step(() =>
+			api.get_cache([village_ident]), ...this.behavior_profile.action_selection_delay); // 2-5 sec default
+		const robber_village: Ivillage = find_state_data(village_ident, village_data);
+		if (robber_village == null)
+			return null;
 
-			if (robber1.npcInfo.troops.units == null || Object.keys(robber1.npcInfo.troops.units).length == 0) {
-				this.send_hero = false;
-				this.send_artillery = false;
-			}
-
-			return robber1_village;
-		}
-		if (robber2.hasNPC != 0 && robber2.npcInfo.troops != null) {
-
-			if (robber2.npcInfo.troops.units == null || Object.keys(robber2.npcInfo.troops.units).length == 0) {
-				this.send_hero = false;
-				this.send_artillery = false;
-			}
-
-			return robber2_village;
-		}
-		return null;
+		return [cell_id, robber_village];
 	}
 
-	async check_troops(): Promise<boolean> {
-		const { robber1_village_id, robber2_village_id, village_id } = this.options;
+	public async find_robbers(center_x: number, center_y: number): Promise<any[]> {
+		const tiles: any[] = await map_scanner.scan(center_x, center_y);
 
-		const villages_data: any[] = await api.get_cache([
-			village.ident + robber1_village_id,
-			village.ident + robber2_village_id
-		]);
-		const robber1_village: Ivillage = find_state_data(village.ident + robber1_village_id, villages_data);
-		if (robber1_village == null) {
-			logger.error('could not get village data of robber 1', this.params.name);
-			return true;
-		}
-		const robber2_village: Ivillage = find_state_data(village.ident + robber2_village_id, villages_data);
-		if (robber2_village == null) {
-			logger.error('could not get village data of robber 2', this.params.name);
-			return true;
-		}
+		const robbers = tiles.filter(tile =>
+			tile.playerId === -1 &&
+			tile.village &&
+			tile.village.type === 5
+		);
 
+		return robbers.length > 0 ? [robbers[0]] : [];
+	}
+
+	private async check_troops(
+		village_id: number,
+		robber_position_id: number,
+		robber_village_id: number
+	): Promise<boolean> {
 		const troops_collection: Itroops_collection[] = await troops.get(village_id, troops_type.moving);
-		if (troops_collection)
-			for (let troop of troops_collection) {
-				if (troop.data.movement) {
 
-					// troops are already going to robber
-					if (troop.data.movement.villageIdTarget == robber1_village.position ||
-						troop.data.movement.villageIdTarget == robber2_village.position) {
-						const time_travel = Number(troop.data.movement.timeFinish) - Number(troop.data.movement.timeStart);
-						const time_left = get_diff_time(Number(troop.data.movement.timeFinish));
-						this.sleep_time = time_left + time_travel;
-						return true;
-					}
+		this.sleep_time = this.get_max_movement_time(village_id, robber_position_id, robber_village_id, troops_collection);
 
-					// troops are still returning from robber
-					if (troop.data.movement.villageIdStart == robber1_village_id ||
-						troop.data.movement.villageIdStart == robber2_village_id) {
-						const time_left = get_diff_time(Number(troop.data.movement.timeFinish));
-						this.sleep_time = time_left;
-						return true;
-					}
+		return this.sleep_time > 0;
+	}
 
-					// get hero movement time
-					if (this.send_hero && troop.data.units[11] > 0) {
-						// hero is leaving the village
-						if (troop.data.movement.villageIdStart == village_id) {
-							const time_travel = Number(troop.data.movement.timeFinish) - Number(troop.data.movement.timeStart);
-							const time_left = get_diff_time(Number(troop.data.movement.timeFinish));
-							this.sleep_time = time_left + time_travel;
-						}
-						// hero is returning to village
-						if (troop.data.movement.villageIdTarget == village_id) {
-							const time_left = get_diff_time(Number(troop.data.movement.timeFinish));
-							this.sleep_time = time_left;
-						}
-					}
-				}
+	private get_max_movement_time(
+		village_id: number,
+		robber_position_id: number,
+		robber_village_id: number,
+		troops_collection: Itroops_collection[]
+	): number {
+		let max_sleep = 0;
+
+		if (!troops_collection) return max_sleep;
+
+		for (const troop of troops_collection) {
+			if (!troop.data.movement) continue;
+
+			const movement = troop.data.movement;
+
+			// troops already going to the robber
+			if (movement.villageIdTarget === robber_position_id) {
+				const travel_time = Number(movement.timeFinish) - Number(movement.timeStart);
+				const time_left = get_diff_time(Number(movement.timeFinish));
+				max_sleep = Math.max(max_sleep, time_left + travel_time);
 			}
 
-		// no troops in transit
-		return false;
+			// troops still returning from the robber
+			if (movement.villageIdStart === robber_village_id) {
+				const time_left = get_diff_time(Number(movement.timeFinish));
+				max_sleep = Math.max(max_sleep, time_left);
+			}
+
+			// get hero movement time
+			if (this.send_hero && troop.data.units[11] > 0) {
+				// hero is leaving the village
+				if (movement.villageIdStart === village_id) {
+					const travel_time = Number(movement.timeFinish) - Number(movement.timeStart);
+					const time_left = get_diff_time(Number(movement.timeFinish));
+					max_sleep = Math.max(max_sleep, time_left + travel_time);
+				}
+				// hero is returning to village
+				if (movement.villageIdTarget === village_id) {
+					const time_left = get_diff_time(Number(movement.timeFinish));
+					max_sleep = Math.max(max_sleep, time_left);
+				}
+			}
+		}
+
+		return max_sleep; // 0 if no troops in transit
 	}
 }
 

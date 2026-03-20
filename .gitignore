@@ -1,6 +1,9 @@
 # Ignore credentials
 cred.txt
 
+# Ignore assets folder
+assets/
+
 # Custom Main JS
 custom_main.js
 
@@ -91,3 +94,6 @@ typings/
 
 # Apple folder custom attributes file
 .DS_Store
+
+# History extension folder for Visual Studio Code
+.history

@@ -14,6 +14,7 @@ export default class Settings extends Component {
 		logzio_host: '',
 		logzio_token: '',
 		user_agent: '',
+		debug_enabled: false,
 		error_logzio_host: false,
 		error_logzio_token: false,
 		error_user_agent: false
@@ -27,7 +28,7 @@ export default class Settings extends Component {
 	}
 
 	submit() {
-		const { logzio_enabled, logzio_host, logzio_token } = this.state;
+		const { logzio_enabled, logzio_host, logzio_token, debug_enabled } = this.state;
 
 		this.setState({
 			error_logzio_host: logzio_enabled && !logzio_host,
@@ -40,7 +41,7 @@ export default class Settings extends Component {
 
 		axios.post('/api/settings', {
 			action: 'save',
-			logzio_enabled, logzio_host, logzio_token, user_agent: this.state.user_agent
+			logzio_enabled, logzio_host, logzio_token, user_agent: this.state.user_agent, debug_enabled
 		});
 		route('/');
 	}
@@ -49,7 +50,7 @@ export default class Settings extends Component {
 		route('/');
 	}
 
-	render(props, { logzio_enabled, logzio_host, logzio_token }) {
+	render(props, { logzio_enabled, logzio_host, logzio_token, debug_enabled }) {
 		const input_class_logzio_host = classNames({
 			'input': true,
 			'is-radiusless': true,
@@ -76,15 +77,33 @@ export default class Settings extends Component {
 
 						<h4 class="title is-4">{props.lang_settings_general}</h4>
 
-						<Input
-							label='User-Agent'
-							placeholder='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0'
-							value={ this.state.user_agent }
-							onChange={ e => this.setState({ user_agent: e.target.value }) }
-							className={ classNames({ 'input': true, 'is-radiusless': true, 'is-danger': this.state.error_user_agent }) }
-							icon='fa-user'
-						/>
-
+						<div class="field">
+							<label class="label">User-Agent</label>
+							<div class="control">
+								<textarea
+									className={ classNames({ 'textarea': true, 'is-radiusless': true, 'is-danger': this.state.error_user_agent }) }
+									placeholder='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0'
+									value={ this.state.user_agent }
+									onChange={ e => this.setState({ user_agent: e.target.value }) }
+									rows={ 4 }
+									style={{ minHeight: '80px' }}
+								></textarea>
+							</div>
+						</div>
+						<br/>
+						<h4 class="title is-4">{props.lang_settings_debug}</h4>
+						<div class="field">
+							<p class='control'>
+								<label class="checkbox is-radiusless">
+									<input
+										type="checkbox"
+										onChange={ e => this.setState({ debug_enabled: e.target.checked }) }
+										checked={ debug_enabled }
+									/> {props.lang_settings_debug_enabled}
+								</label>
+							</p>
+						</div>
+						<br/>
 						<h4 class="title is-4">{props.lang_settings_logzio}</h4>
 						<div class="field">
 							<p class='control'>

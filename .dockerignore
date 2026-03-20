@@ -15,7 +15,7 @@ KingBotApi.dmg
 *.zip
 
 # Package Lock
-package-lock.json
+# package-lock.json
 
 # Logs
 logs
@@ -36,3 +36,9 @@ jspm_packages/
 
 # Apple folder custom attributes file
 .DS_Store
+
+# History extension folder for Visual Studio Code
+.history
+
+# Ignore research folder
+research/

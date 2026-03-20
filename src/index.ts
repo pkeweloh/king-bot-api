@@ -57,17 +57,6 @@ class kingbot {
 			await api.test_proxy();
 		logger.info('start login...', 'api');
 		await api.login(email, password, gameworld, sitter_type, sitter_name);
-
-		// schedule ping task
-		scheduler.scheduleTask({
-			id: 'ping',
-			name: 'ping',
-			nextRun: Math.floor(Date.now() / 1000),
-			run: async () => {
-				await api.ping();
-				return 100; // seconds
-			}
-		}, false);
 	}
 
 	async scout(farmlist_name: string, village_id: number, amount: number = 1, spy_mission: string = 'resources') {

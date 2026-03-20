@@ -134,8 +134,8 @@ class train_feature extends feature_item {
 			const research_ident: string = 'Research:';
 			const unit_research_queue_ident: string = 'UnitResearchQueue:';
 			let params: string[] = [];
-			params.push(unit_research_queue_ident + village_id);
 			params.push(research_ident + village_id);
+			params.push(unit_research_queue_ident + village_id);
 			const response: any[] = await api.get_cache(params);
 			const research: Iresearch = find_state_data(research_ident + village_id, response);
 			if (research == null) {
@@ -284,8 +284,8 @@ class train_feature extends feature_item {
 		const research_ident: string = 'Research:';
 		const unit_research_queue_ident: string = 'UnitResearchQueue:';
 		let params: string[] = [];
-		params.push(unit_research_queue_ident + village_id);
 		params.push(research_ident + village_id);
+		params.push(unit_research_queue_ident + village_id);
 		const response: any[] = await api.get_cache(params);
 		const research: Iresearch = find_state_data(research_ident + village_id, response);
 		return research != null ? research.upgradeQueueFull : true;

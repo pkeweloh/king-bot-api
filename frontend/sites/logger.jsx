@@ -31,7 +31,7 @@ export default class Logger extends Component {
 	async componentDidMount() {
 		await this.loadLogs('current');
 		await axios.get('/api/data?ident=log_files')
-			.then(res => this.setState({ log_files: res.data }));
+			.then(res => this.setState({ log_files: this.sortFiles(res.data) }));
 
 		this.initDataTable();
 	}
@@ -47,6 +47,37 @@ export default class Logger extends Component {
 			data.reverse();
 		}
 		this.setState({ log_list: data, selected_file: file });
+	}
+
+	getFileDate(file) {
+		const match = file.match(/(\d{4})-(\d{2})-(\d{2})/);
+		if (!match)
+			return null;
+		const [year, month, day] = [match[1], match[2], match[3]].map(Number);
+		return new Date(Date.UTC(year, month - 1, day));
+	}
+
+	sortFiles(files) {
+		return [...files].sort((a, b) => {
+			const da = this.getFileDate(a);
+			const db = this.getFileDate(b);
+			if (da && db)
+				return db.getTime() - da.getTime() || a.localeCompare(b);
+			if (da)
+				return -1;
+			if (db)
+				return 1;
+			return 0;
+		});
+	}
+
+	formatLogLabel(file) {
+		const match = file.match(/(\d{4})-(\d{2})-(\d{2})/);
+		if (!match)
+			return file;
+		const prefix = file.split('-')[0];
+		const formatted = `${match[3]}-${match[2]}-${match[1]}`;
+		return prefix === 'debug' ? `${formatted} (debug)` : formatted;
 	}
 
 	handleFileChange = async (e) => {
@@ -87,7 +118,7 @@ export default class Logger extends Component {
 						<div className="select">
 							<select value={ selected_file } onChange={ this.handleFileChange }>
 								<option value="current">{props.lang_log_current_session}</option>
-								{log_files.map((f, i) => <option key={ i } value={ f }>{f}</option>)}
+								{log_files.map((f, i) => <option key={ i } value={ f }>{ this.formatLogLabel(f) }</option>)}
 							</select>
 						</div>
 					</div>

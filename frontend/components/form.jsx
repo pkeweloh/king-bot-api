@@ -5,8 +5,14 @@ import Select from '../components/select';
 
 export { Input, DoubleInput, Select };
 
-export const Button = ({ action, className, onClick, style, icon }) => (
-	<button className={ 'button is-radiusless ' + className } onClick={ onClick }{ ...style ? { style: style } : {} }>
+export const Button = ({ action, className, onClick, style, icon, disabled, title }) => (
+	<button
+		className={ 'button is-radiusless ' + className }
+		onClick={ onClick }
+		{ ...style ? { style: style } : {} }
+		disabled={ disabled }
+		title={ title }
+	>
 		{icon && <span class="icon"><i class={ 'fas ' + icon }></i></span>}
 		<span>{action}</span>
 	</button>

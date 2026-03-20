@@ -1,9 +1,10 @@
-import settings from '../settings';
-import api from '../api';
+import world_scan_proxy from '../world_scan_proxy';
 import { village } from '../gamedata';
-import { Icropfinder, Imap_details, Ivillage } from '../interfaces';
-import { find_state_data } from '../util';
+import { Icropfinder, Imap_region_tile, Imap_details, Ivillage } from '../interfaces';
+import { find_state_data, xy2id, get_distance, sleep_ms, safe_number, build_map_player_name_map, resolve_map_player_name } from '../util';
+import { build_oasis_map, get_oasis_type } from './map_helpers';
 import { oasis_type, res_type } from '../data';
+import cache from '../cache';
 
 class crop_finder {
 
@@ -11,12 +12,13 @@ class crop_finder {
 		village_id: number,
 		find_15c: boolean,
 		find_9c: boolean,
+		find_7c: boolean,
 		only_free: boolean
 	): Promise<any> {
 
 		// default values
-		if (!find_15c && !find_9c)
-			find_15c = find_9c = true;
+		if (!find_15c && !find_9c && !find_7c)
+			find_15c = find_9c = find_7c = true;
 
 		// find village
 		const village_data = await village.get_own();
@@ -30,60 +32,41 @@ class crop_finder {
 		}
 		const { x, y } = found_village.coordinates;
 
-		// get actual map
-		const map_data = await api.get_map(settings.gameworld);
-		if (map_data.errors) {
-			return {
-				error: true,
-				message: map_data.errors[0]?.message,
-				data: null
-			};
-		}
+		const tiles = await world_scan_proxy.run();
+		const cells = this.discover_crops(tiles);
+		const oases = this.discover_oases(tiles);
+		const player_names = build_map_player_name_map(cache.load_map_data());
 
-		// find 9c and 15c crops
-		const cells: any = this.discover_crops(map_data);
+		const oasis_map = build_oasis_map(oases);
 
-		// find oases with crop bonus
-		const oases: any = this.discover_oases(map_data);
-
-		// get map details
-		let map_details: Imap_details = null;
-		const params: Set<string> = new Set();
-		for (let cell of cells) {
-			if (Number(cell.id) == 0)
+		const crops = [];
+		for (const cell of cells) {
+			if (!cell.locationId)
 				continue;
-			if (this.filter_type(cell.resType, find_15c, find_9c))
-				continue;
-			params.add(village.map_details_ident + cell.id);
-		}
-		const map_details_data: any[] = await api.get_cache(Array.from(params));
-
-		// filter and sort crops
-		let crops = [];
-		for (let cell of cells) {
-			if (this.filter_type(cell.resType, find_15c, find_9c))
+			if (this.filter_type(cell.resType, find_15c, find_9c, find_7c))
 				continue;
 
-			map_details = find_state_data(village.map_details_ident + cell.id, map_details_data);
+			const map_details = this.resolve_map_details(cell.locationId);
 			if (!map_details)
 				continue;
 
-			const free = map_details?.playerName == null;
+			const map_player_id = safe_number(map_details?.playerId ?? null);
+			const free = map_player_id === null;
 			if (only_free && !free)
 				continue;
 
-			const bonus = this.calculate_bonus(Number(cell.x), Number(cell.y), oases);
+			const bonus = this.calculate_bonus(cell, oasis_map);
+			const distance = get_distance({ x, y }, { x: cell.x, y: cell.y });
+			const crop_type = this.get_crop_type(cell.resType);
 
-			const distance = this.calculate_distance(cell, x, y);
-
-			const crop : Icropfinder = {
-				id: cell.id,
+			const crop: Icropfinder = {
+				id: cell.locationId,
 				x: cell.x,
 				y: cell.y,
-				is_15c: cell.resType === res_type.c15,
+				crop_type: crop_type,
 				bonus: bonus,
-				playerId: map_details?.playerId,
-				player_name: map_details?.playerName,
+				playerId: map_player_id ?? null,
+				player_name: resolve_map_player_name(map_player_id, player_names, map_details?.playerName),
 				distance: distance,
 				free: free
 			};
@@ -95,68 +78,68 @@ class crop_finder {
 
 		return {
 			error: false,
-			message: `${ crops.length } found`,
+			message: `${crops.length} found`,
 			data: crops
 		};
 	}
 
-	discover_crops(map_data: any): any {
-		const crops = [];
-		for (let cell of map_data.map.cells) {
-			switch (cell.resType) {
-				case res_type.c15:
-				case res_type.c9:
-					crops.push(cell);
-					break;
-			}
-		}
-		return crops;
+	private discover_crops(tiles: Imap_region_tile[]): Imap_region_tile[] {
+		return tiles.filter(tile => this.is_crop_tile(tile));
 	}
 
-	discover_oases(map_data: any): any {
-		const oases = [];
-		for (let cell of map_data.map.cells) {
-			switch (cell.oasis)
-			{
+	private discover_oases(tiles: Imap_region_tile[]): Imap_region_tile[] {
+		return tiles.filter(tile => {
+			const oasis_type_value = get_oasis_type(tile);
+			switch (oasis_type_value) {
 				case oasis_type.wood_1:
 				case oasis_type.clay_1:
 				case oasis_type.iron_1:
 				case oasis_type.crop:
 				case oasis_type.crop_1:
-					oases.push(cell);
-					break;
+					return true;
+				default:
+					return false;
 			}
-		}
-		return oases;
+		});
 	}
 
-	filter_type(resType: any, find_15c: boolean, find_9c: boolean) {
+	private filter_type(resType: any, find_15c: boolean, find_9c: boolean, find_7c: boolean) {
 		const is_15c = resType === res_type.c15;
 		const is_9c = resType === res_type.c9;
-		return (!find_15c || !is_15c) && (!find_9c || !is_9c);
+		const is_c7 =
+			resType === res_type.c7_1 ||
+			resType === res_type.c7_2 ||
+			resType === res_type.c7_3;
+		return (!find_15c || !is_15c) && (!find_9c || !is_9c) && (!find_7c || !is_c7);
 	}
 
-	calculate_distance(village: any, x: number, y: number) {
-		return Math.hypot(Number(village.x) - x, Number(village.y) - y);
+	private get_crop_type(resType: any): string {
+		switch (resType) {
+			case res_type.c15:
+				return '15c';
+			case res_type.c9:
+				return '9c';
+			default:
+				return '7c';
+		}
 	}
 
-	calculate_bonus(x: number, y: number, oases: any[]): number {
-		const embassy_slots : number[] = [];
-		for (let location_id of this.get_influence_area(x, y)) {
-
-			const oasis = oases.find((oasis: any) => {
-				return oasis.id == location_id;
-			});
+	private calculate_bonus(cell: Imap_region_tile, oasis_map: Map<number, Imap_region_tile>): number {
+		const embassy_slots: number[] = [];
+		for (const location_id of this.get_influence_area(cell.x, cell.y)) {
+			const oasis = oasis_map.get(location_id);
 			if (!oasis)
 				continue;
 
-			const crop_bonus = oasis.oasis == '41' ? 50 : 25;
+			if (!this.matches_crop_oasis(cell.resType, oasis))
+				continue;
 
+			const oasis_type_value = get_oasis_type(oasis);
+			const crop_bonus = oasis_type_value === oasis_type.crop_1 ? 50 : 25;
 			if (embassy_slots.length < 3) {
 				embassy_slots.push(crop_bonus);
 				continue;
 			}
-
 			for (let slot = 0; slot < embassy_slots.length; slot++) {
 				if (crop_bonus > embassy_slots[slot]) {
 					embassy_slots[slot] = crop_bonus;
@@ -164,26 +147,65 @@ class crop_finder {
 				}
 			}
 		}
+
 		return embassy_slots.length ?
 			embassy_slots.reduce((a, b) => Number(a) + Number(b)) : 0;
 	}
 
-	get_influence_area(x: number, y: number) : number[] {
+	private matches_crop_oasis(res_type_value: string | null, oasis: Imap_region_tile): boolean {
+		const oasis_type_value = get_oasis_type(oasis);
+		if (!res_type_value || !oasis_type_value)
+			return false;
+
+		switch (res_type_value) {
+			case res_type.c15:
+			case res_type.c9:
+			case res_type.c7_1:
+			case res_type.c7_2:
+			case res_type.c7_3:
+				return oasis_type_value === oasis_type.crop || oasis_type_value === oasis_type.crop_1;
+			default:
+				return false;
+		}
+	}
+
+	private is_crop_tile(tile: Imap_region_tile): boolean {
+		if (!tile || !tile.resType) return false;
+
+		switch (tile.resType) {
+			case res_type.c15:
+			case res_type.c9:
+			case res_type.c7_1:
+			case res_type.c7_2:
+			case res_type.c7_3:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	private get_influence_area(x: number, y: number): number[] {
 		const area = [];
 		// generate left side
 		for (let _x = (x - 3); _x <= (x + 3); _x++)
 			for (let _y = (y - 3); _y < y; _y++)
-				area.push(this.get_location_id(_x, _y));
+				area.push(xy2id(_x, _y));
 		// generate right side
 		for (let _x = (x - 3); _x <= (x + 3); _x++)
 			for (let _y = y; _y <= (y + 3); _y++)
-				area.push(this.get_location_id(_x, _y));
+				area.push(xy2id(_x, _y));
 		return area;
 	}
 
-	get_location_id(x: number, y: number) : number {
-		return 536887296 + x + (y * 32768);
+
+	private resolve_map_details(location_id: number): Imap_details | null {
+		const ident = village.map_details_ident + location_id;
+		const cache_data = cache.get([ident]);
+		if (!cache_data || cache_data.length === 0)
+			return null;
+		return find_state_data(ident, cache_data);
 	}
+
 }
 
 export default new crop_finder();
