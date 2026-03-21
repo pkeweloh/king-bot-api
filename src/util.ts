@@ -1,31 +1,7 @@
 import merge from 'deepmerge';
 import logger from './logger';
-import { Imap_parsed_tile } from './interfaces';
-
-export interface Coordinates {
-	x: number;
-	y: number;
-}
-
-export interface Region {
-	rx: number;
-	ry: number;
-}
-
-export interface Tile {
-	locationId: number;
-	x: number;
-	y: number;
-}
-
-export interface RegionBounds {
-	minX: number;
-	maxX: number;
-	minY: number;
-	maxY: number;
-}
-
-export const REGION_SIZE = 7;
+import { Icoordinates } from './interfaces';
+import { tribe } from './data';
 
 export function log(obj: any): void {
 	logger.info(obj);
@@ -200,6 +176,13 @@ export function normalize_player_name(name: string | null | undefined): string |
 	return normalized;
 }
 
+export function normalize_tribe(value: any): tribe | null {
+	if (value === null || value === undefined || value === '')
+		return null;
+	const candidate = String(value);
+	return (Object.values(tribe) as string[]).includes(candidate) ? candidate as tribe : null;
+}
+
 export function safe_number(value: any): number | null {
 	if (value === null || value === undefined || value === '')
 		return null;
@@ -232,10 +215,10 @@ export function resolve_map_player_name(playerId: number | null, player_map: Map
 	return normalize_player_name(fallback);
 }
 
-export interface IMistakeOptions {
-	chance?: number;      // probability 0..1
-	min_delay?: number;    // minimum delay if mistake occurs
-	max_delay?: number;    // maximum delay if mistake occurs
+export interface Imistake_options {
+	chance?: number;
+	min_delay?: number;
+	max_delay?: number;
 }
 
 // default levels for each type of mistake
@@ -249,7 +232,10 @@ const default_mistake_levels = {
  * return a random human mistake delay
  * accepts optional overrides
  */
-export const random_human_mistake = (level: keyof typeof default_mistake_levels = 'minor', options: IMistakeOptions = {}): number => {
+export const random_human_mistake = (
+	level: keyof typeof default_mistake_levels = 'minor',
+	options: Imistake_options = {}
+): number => {
 	const { chance, min_delay, max_delay } = { ...default_mistake_levels[level], ...options };
 	if (Math.random() > chance) return 0;
 	return get_random_int(min_delay, max_delay);
@@ -266,7 +252,7 @@ export function xy2id(x: number, y: number): number {
 /**
  * converts location_id to map coordinates
  */
-export function id2xy(id: number): Coordinates {
+export function id2xy(id: number): Icoordinates {
 	const y = Math.floor(id / 32768) - 16384;
 	const x = (id % 32768) - 16384;
 	return { x, y };
@@ -275,108 +261,8 @@ export function id2xy(id: number): Coordinates {
 /**
  * calculates distance between two coordinates
  */
-export function get_distance(a: Coordinates, b: Coordinates): number {
+export function get_distance(a: Icoordinates, b: Icoordinates): number {
 	const dx = b.x - a.x;
 	const dy = b.y - a.y;
 	return Math.sqrt(dx * dx + dy * dy);
-}
-
-/**
- * returns the region a tile belongs to
- */
-export function tile_to_region(x: number, y: number): Region {
-	return {
-		rx: Math.floor(x / REGION_SIZE),
-		ry: Math.floor(y / REGION_SIZE)
-	};
-}
-
-/**
- * returns region bounds
- */
-export function region_bounds(rx: number, ry: number): RegionBounds {
-	const minX = rx * REGION_SIZE;
-	const minY = ry * REGION_SIZE;
-
-	return {
-		minX,
-		maxX: minX + REGION_SIZE - 1,
-		minY,
-		maxY: minY + REGION_SIZE - 1
-	};
-}
-
-/**
- * iterates through all tiles within a region
- */
-export function iterate_region_tiles(
-	rx: number,
-	ry: number,
-	callback: (tile: Tile) => void
-) {
-	const bounds = region_bounds(rx, ry);
-
-	for (let x = bounds.minX; x <= bounds.maxX; x++) {
-		for (let y = bounds.minY; y <= bounds.maxY; y++) {
-			const locationId = xy2id(x, y);
-
-			callback({
-				x,
-				y,
-				locationId
-			});
-		}
-	}
-}
-
-/**
- * parses tile_details response
- */
-export function parse_tile_details(data: any): Imap_parsed_tile | null {
-	if (!data) return null;
-
-	const x = data.x;
-	const y = data.y;
-
-	return {
-		x,
-		y,
-		locationId: xy2id(x, y),
-		villageId: data.villageId,
-		hasVillage: Boolean(data.villageId),
-		type: data.type
-	};
-}
-
-/**
- * generates all location_ids within a radius
- */
-export function generate_tiles_in_radius(
-	center: Coordinates,
-	radius: number
-): Tile[] {
-	const tiles: Tile[] = [];
-
-	for (let x = center.x - radius; x <= center.x + radius; x++) {
-		for (let y = center.y - radius; y <= center.y + radius; y++) {
-			tiles.push({
-				x,
-				y,
-				locationId: xy2id(x, y)
-			});
-		}
-	}
-
-	return tiles;
-}
-
-/**
- * checks if a tile is within a radius
- */
-export function is_inside_radius(
-	a: Coordinates,
-	b: Coordinates,
-	radius: number
-): boolean {
-	return get_distance(a, b) <= radius;
 }

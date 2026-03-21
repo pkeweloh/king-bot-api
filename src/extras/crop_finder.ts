@@ -1,8 +1,14 @@
 import world_scan_proxy from '../world_scan_proxy';
 import { village } from '../gamedata';
-import { Icropfinder, Imap_region_tile, Imap_details, Ivillage } from '../interfaces';
-import { find_state_data, xy2id, get_distance, sleep_ms, safe_number, build_map_player_name_map, resolve_map_player_name } from '../util';
-import { build_oasis_map, get_oasis_type } from './map_helpers';
+import { Icropfinder, Imap_region_tile, Ivillage } from '../interfaces';
+import { get_distance, safe_number, build_map_player_name_map, resolve_map_player_name } from '../util';
+import {
+	build_oasis_map,
+	get_oasis_type,
+	is_crop_tile,
+	get_influence_area,
+	resolve_map_details
+} from './map/helpers';
 import { oasis_type, res_type } from '../data';
 import cache from '../cache';
 
@@ -46,7 +52,7 @@ class crop_finder {
 			if (this.filter_type(cell.resType, find_15c, find_9c, find_7c))
 				continue;
 
-			const map_details = this.resolve_map_details(cell.locationId);
+			const map_details = resolve_map_details(cell.locationId);
 			if (!map_details)
 				continue;
 
@@ -84,7 +90,7 @@ class crop_finder {
 	}
 
 	private discover_crops(tiles: Imap_region_tile[]): Imap_region_tile[] {
-		return tiles.filter(tile => this.is_crop_tile(tile));
+		return tiles.filter(is_crop_tile);
 	}
 
 	private discover_oases(tiles: Imap_region_tile[]): Imap_region_tile[] {
@@ -126,7 +132,7 @@ class crop_finder {
 
 	private calculate_bonus(cell: Imap_region_tile, oasis_map: Map<number, Imap_region_tile>): number {
 		const embassy_slots: number[] = [];
-		for (const location_id of this.get_influence_area(cell.x, cell.y)) {
+		for (const location_id of get_influence_area(cell.x, cell.y)) {
 			const oasis = oasis_map.get(location_id);
 			if (!oasis)
 				continue;
@@ -167,43 +173,6 @@ class crop_finder {
 			default:
 				return false;
 		}
-	}
-
-	private is_crop_tile(tile: Imap_region_tile): boolean {
-		if (!tile || !tile.resType) return false;
-
-		switch (tile.resType) {
-			case res_type.c15:
-			case res_type.c9:
-			case res_type.c7_1:
-			case res_type.c7_2:
-			case res_type.c7_3:
-				return true;
-			default:
-				return false;
-		}
-	}
-
-	private get_influence_area(x: number, y: number): number[] {
-		const area = [];
-		// generate left side
-		for (let _x = (x - 3); _x <= (x + 3); _x++)
-			for (let _y = (y - 3); _y < y; _y++)
-				area.push(xy2id(_x, _y));
-		// generate right side
-		for (let _x = (x - 3); _x <= (x + 3); _x++)
-			for (let _y = y; _y <= (y + 3); _y++)
-				area.push(xy2id(_x, _y));
-		return area;
-	}
-
-
-	private resolve_map_details(location_id: number): Imap_details | null {
-		const ident = village.map_details_ident + location_id;
-		const cache_data = cache.get([ident]);
-		if (!cache_data || cache_data.length === 0)
-			return null;
-		return find_state_data(ident, cache_data);
 	}
 
 }

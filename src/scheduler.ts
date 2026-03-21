@@ -1,24 +1,24 @@
 import { sleep, get_random_int } from './util';
 import logger from './logger';
 
-export interface ITask {
+export interface Itask {
 	id: string;
 	name: string;
 	nextRun: number; // timestamp in seconds
 	run: () => Promise<number | null>; // returns next delay in seconds or null if finished
 }
 
-class Scheduler {
-	private tasks: Map<string, ITask> = new Map();
+class SchedulerService {
+	private tasks: Map<string, Itask> = new Map();
 	private isRunning: boolean = false;
 	private minDelayBetweenTasks: number = 2; // minimum seconds between any two tasks to avoid bursts
 
 	/**
-	 * Schedules or updates a task.
-	 * @param task The task to schedule
-	 * @param withJitter If true, adds a random jitter to the execution time
+	 * schedules or updates a task.
+	 * @param task the task to schedule
+	 * @param withJitter if true, adds a random jitter to the execution time
 	 */
-	public scheduleTask(task: ITask, withJitter: boolean = true): void {
+	public schedule_task(task: Itask, withJitter: boolean = true): void {
 		if (withJitter) {
 			const jitter = get_random_int(1, 10); // add 1-10 seconds of jitter
 			task.nextRun += jitter;
@@ -28,7 +28,7 @@ class Scheduler {
 		logger.debug(`task [${task.name}] scheduled for ${new Date(task.nextRun * 1000).toLocaleTimeString()}`, 'scheduler');
 	}
 
-	public removeTask(taskId: string): void {
+	public remove_task(taskId: string): void {
 		if (this.tasks.has(taskId)) {
 			this.tasks.delete(taskId);
 		}
@@ -49,7 +49,7 @@ class Scheduler {
 				const task = dueTasks[0];
 
 				try {
-					logger.debug(`executing task: [${task.name}]`, 'scheduler');
+					logger.debug(`executing task [${task.name}]`, 'scheduler');
 					const nextDelay = await task.run();
 
 					// If the task was removed from the map during execution, don't re-add it
@@ -60,7 +60,7 @@ class Scheduler {
 
 					if (nextDelay !== null) {
 						task.nextRun = Math.floor(Date.now() / 1000) + nextDelay;
-						this.scheduleTask(task, true);
+						this.schedule_task(task, true);
 					} else {
 						this.tasks.delete(task.id);
 						logger.info(`task [${task.name}] completed and removed`, 'scheduler');
@@ -73,7 +73,7 @@ class Scheduler {
 
 					// Retry after 1 minute on error
 					task.nextRun = Math.floor(Date.now() / 1000) + 60;
-					this.scheduleTask(task, false);
+					this.schedule_task(task, false);
 				}
 
 				// Enforce minimum delay between tasks to avoid bursts
@@ -91,4 +91,4 @@ class Scheduler {
 	}
 }
 
-export default new Scheduler();
+export default new SchedulerService();

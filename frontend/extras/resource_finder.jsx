@@ -30,6 +30,7 @@ export default class ResourceFinder extends Component {
 		cache_seeding: false,
 		cache_map_data_cells: 0,
 		cache_map_data_regions: { layer1: 0, layer3: 0 },
+		data_revision: 0,
 	};
 
 	componentDidMount() {
@@ -136,7 +137,7 @@ export default class ResourceFinder extends Component {
 		}
 
 		const tableMessage = data.length ? '' : this.props.lang_table_no_results;
-		this.setState({ resources: [ ...data ], loading: false, status_message: tableMessage });
+		this.setState({ resources: [ ...data ], loading: false, status_message: tableMessage, data_revision: Date.now() });
 	}
 
 	set_res_type = async e =>  {
@@ -175,7 +176,8 @@ export default class ResourceFinder extends Component {
 		cache_seeding,
 		status_message,
 		cache_map_data_cells,
-		cache_map_data_regions
+		cache_map_data_regions,
+		data_revision
 	}) {
 		const village_select_class = classNames({
 			select: true,
@@ -319,6 +321,7 @@ export default class ResourceFinder extends Component {
 					/>
 					<ResourceTable
 						content={ resources }
+						data_revision={ data_revision }
 					/>
 				</div>
 

@@ -2,12 +2,12 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import logger from './logger';
-import { xy2id, id2xy, RegionBounds } from './util';
-import { Imap_region_tile } from './interfaces';
+import { xy2id, id2xy } from './util';
+import { Iregion_bounds, Imap_region_tile } from './interfaces';
 
 type region_entries = { [region_id: string]: any };
 
-type RegionTileRow = {
+type region_tile_row = {
 	tileId: number;
 	layer: number;
 	regionId: number;
@@ -21,7 +21,7 @@ type RegionTileRow = {
 	payload: string | null;
 };
 
-interface NormalizedTile {
+interface Inormalized_tile {
 	tileId: number;
 	layer: number;
 	regionId: number;
@@ -271,7 +271,7 @@ class CacheService {
 		});
 	}
 
-	private upsert_region_tiles(tiles: NormalizedTile[]) {
+	private upsert_region_tiles(tiles: Inormalized_tile[]) {
 		if (!this.db || tiles.length === 0) return;
 
 		const stmt = this.db.prepare(`
@@ -294,7 +294,7 @@ class CacheService {
 
 		const now = Date.now();
 
-		const insert_many = this.db.transaction((rows: NormalizedTile[]) => {
+		const insert_many = this.db.transaction((rows: Inormalized_tile[]) => {
 			for (const tile of rows) {
 				stmt.run({
 					tileId: tile.tileId,
@@ -378,7 +378,7 @@ class CacheService {
 		return this.map_tile_rows(this.query_region_tiles(sql, [layer, regionId]));
 	}
 
-	public get_tiles_in_area(bounds: RegionBounds): Imap_region_tile[] {
+	public get_tiles_in_area(bounds: Iregion_bounds): Imap_region_tile[] {
 		if (!this.db) return [];
 
 		const sql = `
@@ -393,14 +393,14 @@ class CacheService {
 		);
 	}
 
-	private query_region_tiles(sql: string, params: any[]): RegionTileRow[] {
+	private query_region_tiles(sql: string, params: any[]): region_tile_row[] {
 		if (!this.db) return [];
 		const stmt = this.db.prepare(sql);
-		const rows = stmt.all(...params) as RegionTileRow[];
+		const rows = stmt.all(...params) as region_tile_row[];
 		return rows || [];
 	}
 
-	private map_tile_rows(rows: RegionTileRow[]): Imap_region_tile[] {
+	private map_tile_rows(rows: region_tile_row[]): Imap_region_tile[] {
 		if (!Array.isArray(rows) || rows.length === 0) {
 			return [];
 		}
@@ -408,7 +408,7 @@ class CacheService {
 		return rows.map(row => this.map_row_to_region_tile(row));
 	}
 
-	private map_row_to_region_tile(row: RegionTileRow): Imap_region_tile {
+	private map_row_to_region_tile(row: region_tile_row): Imap_region_tile {
 		const payload = this.parse_tile_payload(row.payload) ?? {};
 		const playerId =
 			row.playerId ??
@@ -460,8 +460,8 @@ class CacheService {
 		return Object.keys(numeric_entries).length > 0 ? numeric_entries : null;
 	}
 
-	private normalize_region_tiles(layer: number, region_id: number, region_value: any): NormalizedTile[] {
-		const tiles: NormalizedTile[] = [];
+	private normalize_region_tiles(layer: number, region_id: number, region_value: any): Inormalized_tile[] {
+		const tiles: Inormalized_tile[] = [];
 		if (!region_value) return tiles;
 
 		const candidate_array = Array.isArray(region_value) ? region_value : region_value.tiles;
@@ -627,7 +627,7 @@ class CacheService {
 		};
 	}
 
-	private fetch_region_tile(tileId: number): NormalizedTile | null {
+	private fetch_region_tile(tileId: number): Inormalized_tile | null {
 		if (!this.db || !Number.isFinite(tileId)) return null;
 
 		const stmt = this.db.prepare(`

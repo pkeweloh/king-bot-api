@@ -2,7 +2,7 @@ import database from '../database';
 import uniqid from 'uniqid';
 import logger from '../logger';
 import { list_remove, get_date } from '../util';
-import scheduler, { ITask } from '../scheduler';
+import scheduler, { Itask } from '../scheduler';
 
 export interface Ifeature_params extends Ifeature, Ioptions {
 	description?: string
@@ -95,7 +95,7 @@ export abstract class feature_single implements feature {
 
 		this.running = true;
 
-		const task: ITask = {
+		const task: Itask = {
 			id: this.params.ident,
 			name: this.params.name,
 			nextRun: get_date(),
@@ -115,8 +115,8 @@ export abstract class feature_single implements feature {
 			}
 		};
 
-		scheduler.scheduleTask(task);
-		logger.info(`task [${task.id}] started`, task.name);
+		scheduler.schedule_task(task);
+		logger.info('task started', task.name);
 	}
 
 	save(): void {
@@ -142,8 +142,8 @@ export abstract class feature_single implements feature {
 
 		if (action == 'stop') {
 			this.stop();
-			scheduler.removeTask(this.params.ident);
-			logger.info(`task [${this.params.ident}] stopped`, this.params.name);
+			scheduler.remove_task(this.params.ident);
+			logger.info('task stopped', this.params.name);
 
 			res.message = 'offline';
 			return res;
@@ -350,8 +350,8 @@ export abstract class feature_item {
 	stop(): void {
 		this.running = false;
 		this.set_options({ ...this.get_options(), run: false });
-		scheduler.removeTask(this.get_options().uuid);
-		logger.info(`task [${this.params.ident}] stopped`, this.params.name);
+		scheduler.remove_task(this.get_options().uuid);
+		logger.info('task stopped', this.params.name);
 	}
 
 	save(): void {
@@ -372,7 +372,7 @@ export abstract class feature_item {
 		this.running = true;
 		this.save();
 
-		const task: ITask = {
+		const task: Itask = {
 			id: this.get_options().uuid,
 			name: this.params.name,
 			nextRun: get_date(),
@@ -392,7 +392,8 @@ export abstract class feature_item {
 			}
 		};
 
-		scheduler.scheduleTask(task);
-		logger.info(`task [${task.id}] started`, task.name);
+		scheduler.schedule_task(task);
+		logger.info('task started', task.name);
 	}
 }
+

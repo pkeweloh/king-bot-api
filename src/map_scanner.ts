@@ -17,17 +17,17 @@ class map_scanner {
 	private cached_layer2_regions: Map<number, number> = new Map();
 	private cached_layer3_regions: Map<number, number> = new Map();
 	private request_timeout: NodeJS.Timeout | null = null;
-	private readonly REQUEST_DELAY = 10;
-	private readonly WORLD_SCAN_BATCH = 8;
-	private readonly WORLD_SCAN_STEP = 50;
-	private readonly WORLD_SCAN_CONTINUOUS_CHUNK = 3;
-	private readonly WORLD_SCAN_STEP_PAUSE_MS = 120;
-	private readonly WORLD_SCAN_PAUSE_MIN_MS = 300;
-	private readonly WORLD_SCAN_PAUSE_MAX_MS = 800;
+	private readonly request_delay = 10;
+	private readonly world_scan_batch = 8;
+	private readonly world_scan_step = 50;
+	private readonly world_scan_continuous_chunk = 3;
+	private readonly world_scan_step_pause_ms = 120;
+	private readonly world_scan_pause_min_ms = 300;
+	private readonly world_scan_pause_max_ms = 800;
 	private world_village_index: Map<number, Imap_village_tile> = new Map();
-	private readonly LAYER1_CACHE_TTL_MS = 30 * 60_000;
-	private readonly LAYER2_CACHE_TTL_MS = 30 * 60_000;
-	private readonly LAYER3_CACHE_TTL_MS = 60 * 60_000;
+	private readonly layer1_cache_ttl_ms = 30 * 60_000;
+	private readonly layer2_cache_ttl_ms = 30 * 60_000;
+	private readonly layer3_cache_ttl_ms = 60 * 60_000;
 	private force_refresh_cache = false;
 	private seeded_cache_persistent = false;
 	private map_data_cells: Map<string, any> = new Map();
@@ -149,7 +149,7 @@ class map_scanner {
 			this.seeded_cache_persistent = false;
 		}
 
-		const path = this.build_world_path(world_radius, this.WORLD_SCAN_STEP);
+		const path = this.build_world_path(world_radius, this.world_scan_step);
 		const collect_tiles = options.collect_tiles ?? true;
 		const chunk_handler = options.chunk_handler;
 		const collected_tiles: Imap_region_tile[] = collect_tiles ? [] : [];
@@ -160,7 +160,7 @@ class map_scanner {
 			for (let i = 0; i < path.length; i++) {
 				window.push(path[i]);
 				const atEnd = i === path.length - 1;
-				if (window.length === this.WORLD_SCAN_CONTINUOUS_CHUNK || atEnd) {
+				if (window.length === this.world_scan_continuous_chunk || atEnd) {
 					await this.simulate_map_movement_continuous(window);
 					this.enqueue_map_data_regions();
 					if (this.should_flush_world_scan() || atEnd) {
@@ -177,7 +177,7 @@ class map_scanner {
 					const last_movement = window[window.length - 1];
 					window = atEnd ? [] : last_movement ? [last_movement] : [];
 				} else {
-					await sleep_ms(this.WORLD_SCAN_STEP_PAUSE_MS);
+					await sleep_ms(this.world_scan_step_pause_ms);
 					await this.maybe_trigger_heatmap_refresh();
 				}
 			}
@@ -247,6 +247,7 @@ class map_scanner {
 		const layer3_count = regionIdCollection[3]?.length ?? 0;
 		logger.debug(`sending reactive request with ${total_regions} regions (l1: ${layer1_count}, l2: ${layer2_count}, l3: ${layer3_count})`, 'map_scanner');
 
+		await this.delay_before_request(total_regions);
 		try {
 			const response = await api.get_by_region_ids(regionIdCollection);
 			if (!response) return [];
@@ -263,6 +264,17 @@ class map_scanner {
 		const visible_tiles = this.calculate_visible_tiles(center, viewport_size);
 		visible_tiles.forEach(tile => this.process_visible_tile(tile.x, tile.y));
 		await this.simulate_mouse_hovers(center);
+	}
+
+	private async delay_before_request(total_regions: number): Promise<void> {
+		if (!total_regions) return;
+		const base_delay = 120;
+		const per_region = 35;
+		const computed = base_delay + total_regions * per_region;
+		const target = Math.min(900, computed);
+		const min_delay = Math.max(80, target - 120);
+		const max_delay = target + 120;
+		await sleep_random_ms(min_delay, max_delay);
 	}
 
 	private async simulate_map_movement_continuous(movements: Array<{ x: number; y: number; direction?: 'ltr' | 'rtl'; row?: number }>): Promise<void> {
@@ -422,7 +434,7 @@ class map_scanner {
 		if (!this.request_timeout) {
 			this.request_timeout = setTimeout(() => {
 				this.request_timeout = null;
-			}, this.REQUEST_DELAY);
+			}, this.request_delay);
 		}
 	}
 
@@ -453,8 +465,8 @@ class map_scanner {
 	}
 
 	private compute_random_batch_threshold(): number {
-		const base = Math.max(4, Math.floor(this.WORLD_SCAN_BATCH * 0.6));
-		const jitter_max = Math.max(1, Math.floor(this.WORLD_SCAN_BATCH / 2));
+		const base = Math.max(4, Math.floor(this.world_scan_batch * 0.6));
+		const jitter_max = Math.max(1, Math.floor(this.world_scan_batch / 2));
 		return base + Math.floor(Math.random() * jitter_max);
 	}
 
@@ -468,13 +480,13 @@ class map_scanner {
 	}
 
 	private get_layer_batch_limit(layer: number): number {
-		if (layer === 2) return Math.max(4, Math.floor(this.WORLD_SCAN_BATCH / 3));
+		if (layer === 2) return Math.max(4, Math.floor(this.world_scan_batch / 3));
 		return this.get_world_batch_threshold();
 	}
 
 	private random_pause_ms(): number {
-		const range = this.WORLD_SCAN_PAUSE_MAX_MS - this.WORLD_SCAN_PAUSE_MIN_MS + 1;
-		return this.WORLD_SCAN_PAUSE_MIN_MS + Math.floor(Math.random() * range);
+		const range = this.world_scan_pause_max_ms - this.world_scan_pause_min_ms + 1;
+		return this.world_scan_pause_min_ms + Math.floor(Math.random() * range);
 	}
 
 	private reset_world_villages(): void {
@@ -495,11 +507,11 @@ class map_scanner {
 	}
 
 	private has_valid_layer1_cache(region_id: number): boolean {
-		return this.has_valid_layer_cache(1, region_id, this.cached_layer1_regions, this.LAYER1_CACHE_TTL_MS);
+		return this.has_valid_layer_cache(1, region_id, this.cached_layer1_regions, this.layer1_cache_ttl_ms);
 	}
 
 	private has_valid_layer3_cache(region_id: number): boolean {
-		return this.has_valid_layer_cache(3, region_id, this.cached_layer3_regions, this.LAYER3_CACHE_TTL_MS);
+		return this.has_valid_layer_cache(3, region_id, this.cached_layer3_regions, this.layer3_cache_ttl_ms);
 	}
 
 	private has_valid_layer_cache(layer: number, region_id: number, cache_map: Map<number, number>, ttl: number): boolean {
@@ -679,7 +691,7 @@ class map_scanner {
 	}
 
 	private has_valid_layer2_cache(region_id: number): boolean {
-		return this.has_valid_layer_cache(2, region_id, this.cached_layer2_regions, this.LAYER2_CACHE_TTL_MS);
+		return this.has_valid_layer_cache(2, region_id, this.cached_layer2_regions, this.layer2_cache_ttl_ms);
 	}
 
 	private should_hover_tile(cell: any): boolean {

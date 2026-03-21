@@ -2,7 +2,7 @@ import map_scanner from './map_scanner';
 import { Imap_region_tile } from './interfaces';
 import cache from './cache';
 import database from './database';
-import { RegionBounds } from './util';
+import { Iregion_bounds } from './interfaces';
 
 export interface Imap_scan_options {
 	world_radius?: number;
@@ -10,8 +10,8 @@ export interface Imap_scan_options {
 	force?: boolean;
 }
 
-const DEFAULT_WORLD_RADIUS = 60;
-const DEFAULT_SCAN_TTL_MS = 15_000;
+const default_world_radius = 60;
+const default_scan_ttl_ms = 15_000;
 
 class world_scan_proxy {
 	private cached_tiles: Imap_region_tile[] = [];
@@ -21,7 +21,7 @@ class world_scan_proxy {
 
 	public async run(options: Imap_scan_options = {}): Promise<Imap_region_tile[]> {
 		const radius = options.world_radius ?? this.get_world_radius();
-		const ttl = options.ttl_ms ?? DEFAULT_SCAN_TTL_MS;
+		const ttl = options.ttl_ms ?? default_scan_ttl_ms;
 		const now = Date.now();
 		const seeded_ready = this.is_seeded_cache_ready();
 
@@ -67,11 +67,11 @@ class world_scan_proxy {
 	private get_seeded_cache_radius(): number {
 		const value = database.get('map_cache.radius').value();
 		const numeric = Number(value);
-		return Number.isFinite(numeric) ? numeric : DEFAULT_WORLD_RADIUS;
+		return Number.isFinite(numeric) ? numeric : default_world_radius;
 	}
 
 	private load_seeded_tiles(radius: number): Imap_region_tile[] {
-		const bounds: RegionBounds = {
+		const bounds: Iregion_bounds = {
 			minX: -radius,
 			maxX: radius,
 			minY: -radius,
@@ -82,7 +82,7 @@ class world_scan_proxy {
 
 	private get_world_radius(): number {
 		const stored = Number(database.get('travian_config.world_radius').value());
-		return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_WORLD_RADIUS;
+		return Number.isFinite(stored) && stored > 0 ? stored : default_world_radius;
 	}
 }
 

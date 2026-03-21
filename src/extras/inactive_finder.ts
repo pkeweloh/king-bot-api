@@ -2,9 +2,8 @@ import settings from '../settings';
 import api from '../api';
 import cache from '../cache';
 import { farming, village } from '../gamedata';
-import { tribe } from '../data';
-import { find_state_data, get_distance } from '../util';
-import { Ifarmfinder, Ifarmlist, Ivillage } from '../interfaces';
+import { find_state_data, get_distance, safe_number, normalize_tribe } from '../util';
+import { Ifarmfinder, Ifarmlist, Ivillage, Imap_snapshot, Imap_player_snapshot, Imap_village_snapshot, Iplayer_match } from '../interfaces';
 import { Iresponse } from '../features/feature';
 
 class inactive_finder {
@@ -337,47 +336,6 @@ class inactive_finder {
 			player.kingdomId = safe_number(payload.kingdomId ?? payload.kingdom) ?? player.kingdomId;
 		}
 	}
-}
-
-interface Imap_snapshot {
-	players: Imap_player_snapshot[];
-}
-
-interface Imap_player_snapshot {
-	playerId: number;
-	name: string | null;
-	tribeId: tribe | null;
-	kingdomId: number | null;
-	villages: Imap_village_snapshot[];
-}
-
-interface Imap_village_snapshot {
-	villageId: number;
-	name: string | null;
-	x: number;
-	y: number;
-	population: number | null;
-	isMainVillage: boolean;
-	isCity: boolean;
-}
-
-interface Iplayer_match {
-	recent: Imap_player_snapshot;
-	aged: Imap_player_snapshot;
-}
-
-function safe_number(value: any): number | null {
-	if (value === null || value === undefined || value === '')
-		return null;
-	const candidate = Number(value);
-	return Number.isFinite(candidate) ? candidate : null;
-}
-
-function normalize_tribe(value: any): tribe | null {
-	if (value === null || value === undefined || value === '')
-		return null;
-	const candidate = String(value);
-	return (Object.values(tribe) as string[]).includes(candidate) ? candidate as tribe : null;
 }
 
 export default new inactive_finder();

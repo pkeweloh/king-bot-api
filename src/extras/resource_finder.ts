@@ -1,8 +1,15 @@
 import world_scan_proxy from '../world_scan_proxy';
 import { village } from '../gamedata';
-import { Iresourcefinder, Imap_region_tile, Imap_details, Ivillage } from '../interfaces';
-import { find_state_data, xy2id, get_distance, sleep_ms, safe_number, build_map_player_name_map, resolve_map_player_name } from '../util';
-import { build_oasis_map, get_oasis_type } from './map_helpers';
+import { Iresourcefinder, Imap_region_tile, Ivillage } from '../interfaces';
+import { get_distance, safe_number, build_map_player_name_map, resolve_map_player_name } from '../util';
+import {
+	build_oasis_map,
+	get_oasis_type,
+	is_resource_tile,
+	get_influence_area,
+	resolve_map_details,
+	tile_has_village
+} from './map/helpers';
 import { oasis_type, res_type } from '../data';
 import cache from '../cache';
 
@@ -45,12 +52,12 @@ class resource_finder {
 			if (this.filter_type(cell.resType, find_wood, find_clay, find_iron))
 				continue;
 
-			const map_details = this.resolve_map_details(cell.locationId);
+			const map_details = resolve_map_details(cell.locationId);
 			if (!map_details)
 				continue;
 
 			const map_player_id = safe_number(map_details?.playerId ?? null);
-			const has_village = this.tile_has_village(map_details);
+			const has_village = tile_has_village(map_details);
 			const free = !has_village;
 			if (only_free && !free)
 				continue;
@@ -83,7 +90,7 @@ class resource_finder {
 	}
 
 	private discover_resources(tiles: Imap_region_tile[]): Imap_region_tile[] {
-		return tiles.filter(tile => this.is_resource_tile(tile));
+		return tiles.filter(is_resource_tile);
 	}
 
 	private discover_oases(tiles: Imap_region_tile[]): Imap_region_tile[] {
@@ -112,7 +119,7 @@ class resource_finder {
 
 	private calculate_bonus(cell: Imap_region_tile, oasis_map: Map<number, Imap_region_tile>): number {
 		const embassy_slots: number[] = [];
-		for (const location_id of this.get_influence_area(cell.x, cell.y)) {
+		for (const location_id of get_influence_area(cell.x, cell.y)) {
 			const oasis = oasis_map.get(location_id);
 			if (!oasis)
 				continue;
@@ -130,21 +137,6 @@ class resource_finder {
 		}
 		return embassy_slots.length ?
 			embassy_slots.reduce((a, b) => Number(a) + Number(b)) : 0;
-	}
-
-	private is_resource_tile(tile: Imap_region_tile): boolean {
-		if (!tile || !tile.resType) return false;
-		switch (tile.resType) {
-			case res_type.wood_1:
-			case res_type.wood_2:
-			case res_type.clay_1:
-			case res_type.clay_2:
-			case res_type.iron_1:
-			case res_type.iron_2:
-				return true;
-			default:
-				return false;
-		}
 	}
 
 	private matches_resource_oasis(res_type_value: string, oasis: Imap_region_tile): boolean {
@@ -165,44 +157,6 @@ class resource_finder {
 			default:
 				return false;
 		}
-	}
-
-	get_influence_area(x: number, y: number): number[] {
-		const area = [];
-		// generate left side
-		for (let _x = (x - 3); _x <= (x + 3); _x++)
-			for (let _y = (y - 3); _y < y; _y++)
-				area.push(xy2id(_x, _y));
-		// generate right side
-		for (let _x = (x - 3); _x <= (x + 3); _x++)
-			for (let _y = y; _y <= (y + 3); _y++)
-				area.push(xy2id(_x, _y));
-		return area;
-	}
-
-	private to_number(value: number | string | null | undefined): number | null {
-		if (value === null || value === undefined || value === '')
-			return null;
-		const numeric = Number(value);
-		if (!Number.isFinite(numeric) || numeric <= 0)
-			return null;
-		return numeric;
-	}
-
-	private tile_has_village(details: Imap_details | null): boolean {
-		if (!details)
-			return false;
-		const raw = details.hasVillage ?? 0;
-		const parsed = Number(raw);
-		return Number.isFinite(parsed) && parsed > 0;
-	}
-
-	private resolve_map_details(location_id: number): Imap_details | null {
-		const ident = village.map_details_ident + location_id;
-		const cache_data = cache.get([ident]);
-		if (!cache_data || cache_data.length === 0)
-			return null;
-		return find_state_data(ident, cache_data);
 	}
 
 }

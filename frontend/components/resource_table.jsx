@@ -1,4 +1,4 @@
-import { h, render, Component } from 'preact';
+import { h, Component } from 'preact';
 import { connect } from 'unistore/preact';
 import lang, { storeKeys } from '../language';
 
@@ -22,128 +22,121 @@ export default class ResourceTable extends Component {
 
 	table = null;
 
-	createTable(options = {}) {
+	componentDidMount() {
+		this.createTable();
+	}
+
+	componentWillReceiveProps(nextProps) {
+		const revisionChanged = nextProps.data_revision !== this.props.data_revision;
+		if (nextProps.content.length !== this.props.content.length || revisionChanged) {
+			this.updateTableData(nextProps.content);
+		}
+	}
+
+	shouldComponentUpdate() {
+		return false;
+	}
+
+	componentWillUnmount() {
 		if (this.table) {
 			this.table.destroy();
 			this.table = null;
 		}
+	}
+
+	createTable() {
+		if (this.table)
+			return;
+
+		const oasisTypes = this.props.lang_oasis_types;
+
 		this.table = jQuery('#table').DataTable({
 			dom: 'ritp',
 			pageLength: 10,
 			lengthChange: false,
 			language: {
 				url: '/i18n/' + lang.currentLanguage + '.json'
-			}
+			},
+			columns: [
+				{
+					data: 'distance',
+					render: distance => Number(distance ?? 0).toFixed(1),
+					className: 'dt-center'
+				},
+				{
+					data: null,
+					className: 'dt-center',
+					render: row => `<span title="id: ${row.id}">(${row.x}|${row.y})</span>`
+				},
+				{
+					data: 'res_type',
+					render: res_type => {
+						let oasis_type;
+						switch (res_type) {
+							case '5436':
+							case '5346':
+								oasis_type = '10';
+								break;
+							case '4536':
+							case '3546':
+								oasis_type = '20';
+								break;
+							case '4356':
+							case '3456':
+								oasis_type = '30';
+								break;
+							default:
+								oasis_type = '';
+						}
+						const label = oasis_type ? ` title="${oasisTypes[oasis_type] ?? ''}"` : '';
+						const icon = oasis_type ? `<i class="oasis oasis${oasis_type}"${label}></i>` : '';
+						return `
+							<div style="display:inline-flex;align-items:center;vertical-align:text-top;">
+								${icon}<span style="padding-left:0.2em;padding-right:0.4em;">${res_type}</span>
+							</div>
+						`;
+					}
+				},
+				{
+					data: 'bonus',
+					render: bonus => `${bonus}%`
+				},
+				{
+					data: null,
+					className: 'dt-center',
+					render: row => row.free
+						? '<a class="has-text-black"><span class="icon is-medium"><i class="fas fa-lg fa-check"></i></span></a>'
+						: `<span style="min-width:2rem;display:inline-block;">${row.player_name ?? '-'}</span>`
+				}
+			],
+			data: this.props.content
 		});
-		if (jQuery('table').length > 1)
-			jQuery('table')[1].remove();
-
-		if (options.order && options.order.length)
-			this.table.order(options.order);
-		if (typeof options.page === 'number')
-			this.table.page(options.page);
-		this.table.draw(false);
-
 	}
 
-	componentDidMount() {
-		this.createTable();
+	updateTableData(content) {
+		if (!this.table)
+			return;
+		this.table.clear();
+		this.table.rows.add(content);
+		this.table.page('first').draw(false);
 	}
 
-	componentDidUpdate(prevProps) {
-		if (this.props.content !== prevProps.content) {
-			const page = this.table ? this.table.page.info().page : 0;
-			const order = this.table ? this.table.order() : [];
-			this.createTable({ page, order });
-		}
-	}
-
-	shouldComponentUpdate(nextProps) {
-		return this.props.content !== nextProps.content;
-	}
-
-	render(props) {
-		const { content } = props;
-		const list = content.map(item => <Resource content={ item } props={ props } />);
-
+	render() {
 		return (
 			<div>
 				<table id="table" className='table is-hoverable is-fullwidth'>
 					<thead>
 						<tr>
-							<th style={ rowCenterStyle }>{props.lang_table_distance}</th>
-							<th style={ rowCenterStyle }>{props.lang_table_coordinates}</th>
-							<th style={ rowStyle }>{props.lang_table_type}</th>
-							<th style={ rowStyle }>{props.lang_table_bonus}</th>
-							<th style={ rowCenterStyle }>{props.lang_table_free}</th>
+							<th style={ rowCenterStyle }>{this.props.lang_table_distance}</th>
+							<th style={ rowCenterStyle }>{this.props.lang_table_coordinates}</th>
+							<th style={ rowStyle }>{this.props.lang_table_type}</th>
+							<th style={ rowStyle }>{this.props.lang_table_bonus}</th>
+							<th style={ rowCenterStyle }>{this.props.lang_table_free}</th>
 						</tr>
 					</thead>
-					<tbody>{list}</tbody>
+					<tbody />
 				</table>
 			</div>
-		);
-	}
-}
-
-
-class Resource extends Component {
-
-	render({ content, props }) {
-		const {
-			id, x, y, res_type, bonus, playerId, player_name, distance, free
-		} = content;
-
-		const coordinates = `(${x}|${y})`;
-
-		let oasis_type;
-		switch (res_type) {
-			case '5436':
-			case '5346':
-				oasis_type = '10';
-				break;
-			case '4536':
-			case '3546':
-				oasis_type = '20';
-				break;
-			case '4356':
-			case '3456':
-				oasis_type = '30';
-				break;
-		}
-
-		return (
-			<tr>
-				<td style={ rowCenterStyle }>
-					{ Number(distance).toFixed(1) }
-				</td>
-				<td style={ rowCenterStyle } title={ `id: ${id}` }>
-					{ coordinates }
-				</td>
-				<td style={ rowStyle }>
-					<div style={{ display: 'inline-flex', alignItems: 'center', verticalAlign: 'text-top' }}>
-						{ oasis_type && <i class={ `oasis oasis${oasis_type}` } title={ props.lang_oasis_types[oasis_type] }></i> }
-						<span style={{ paddingLeft: '0.2em', paddingRight: '0.4em' }}>{ res_type }</span>
-					</div>
-				</td>
-				<td style={ rowStyle }>
-					{ bonus }%
-				</td>
-				<td style={ rowCenterStyle } title={ `playerId: ${playerId}` }>
-					<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-						{ free ? (
-							<a class="has-text-black">
-								<span class='icon is-medium'>
-									<i class='fas fa-lg fa-check'></i>
-								</span>
-							</a>
-						) : (
-							<span style={{ minWidth: '2rem', display: 'inline-block' }}>
-								{ player_name ?? '-' }
-							</span>
-						) }
-					</div>
-				</td>
-			</tr>
 		);
 	}
 }

@@ -13,8 +13,8 @@ import BrowserService from './browser';
 
 class api {
 	private axios: AxiosInstance;
-	private readonly LOBBY_ENDPOINT = 'https://lobby.kingdoms.com/api/index.php';
-	private readonly BROWSER_HEADERS = {
+	private readonly lobby_endpoint = 'https://lobby.kingdoms.com/api/index.php';
+	private readonly browser_headers = {
 		'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,text/plain,*/*;q=0.8',
 		'Accept-Language': 'es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7',
 		'Accept-Encoding': 'gzip, deflate',
@@ -51,7 +51,7 @@ class api {
 		this.axios.defaults.headers.common['User-Agent'] = user_agent;
 
 		// set static browser-like headers
-		for (const [key, value] of Object.entries(this.BROWSER_HEADERS)) {
+		for (const [key, value] of Object.entries(this.browser_headers)) {
 			this.axios.defaults.headers.common[key] = value as string;
 		}
 	}
@@ -567,7 +567,7 @@ class api {
 			params,
 			session
 		};
-		const res = await this.axios.post(this.LOBBY_ENDPOINT, payload);
+		const res = await this.axios.post(this.lobby_endpoint, payload);
 		return res.data;
 	}
 

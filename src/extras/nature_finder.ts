@@ -1,10 +1,9 @@
 import world_scan_proxy from '../world_scan_proxy';
 import { village } from '../gamedata';
-import { Inaturefinder, Imap_details, Imap_region_tile, Ivillage } from '../interfaces';
-import { find_state_data, get_distance, sleep_ms } from '../util';
-import { get_oasis_type } from './map_helpers';
+import { Inaturefinder, Imap_region_tile, Ivillage } from '../interfaces';
+import { get_distance } from '../util';
+import { get_oasis_type, resolve_map_details } from './map/helpers';
 import { nature_type } from '../data';
-import cache from '../cache';
 
 class nature_finder {
 
@@ -41,7 +40,7 @@ class nature_finder {
 			if (!cell.locationId)
 				continue;
 
-			const map_details = this.resolve_map_details(cell.locationId);
+			const map_details = resolve_map_details(cell.locationId);
 
 			if (!map_details)
 				continue;
@@ -81,13 +80,6 @@ class nature_finder {
 
 	discover_oases(tiles: Imap_region_tile[]): Imap_region_tile[] {
 		return tiles.filter(tile => get_oasis_type(tile) !== null);
-	}
-
-	private resolve_map_details(location_id: number): Imap_details | null {
-		const ident = village.map_details_ident + location_id;
-		const cache_data = cache.get([ident]);
-		if (!cache_data || cache_data.length === 0) return null;
-		return find_state_data(ident, cache_data);
 	}
 }
 

@@ -627,11 +627,47 @@ export interface Imap_region_tile {
 	[key: string]: any
 }
 
-export interface Imap_parsed_tile {
-	x: number
-	y: number
-	locationId: number
-	villageId?: number
-	hasVillage: boolean
-	type?: string
+export interface Iregion {
+	rx: number;
+	ry: number;
+}
+
+export interface Itile {
+	locationId: number;
+	x: number;
+	y: number;
+}
+
+export interface Iregion_bounds {
+	minX: number;
+	maxX: number;
+	minY: number;
+	maxY: number;
+}
+
+export interface Imap_snapshot {
+	players: Imap_player_snapshot[];
+}
+
+export interface Imap_player_snapshot {
+	playerId: number;
+	name: string | null;
+	tribeId: tribe | null;
+	kingdomId: number | null;
+	villages: Imap_village_snapshot[];
+}
+
+export interface Imap_village_snapshot {
+	villageId: number;
+	name: string | null;
+	x: number;
+	y: number;
+	population: number | null;
+	isMainVillage: boolean;
+	isCity: boolean;
+}
+
+export interface Iplayer_match {
+	recent: Imap_player_snapshot;
+	aged: Imap_player_snapshot;
 }
