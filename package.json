@@ -24,10 +24,10 @@
     "build:package:bash": "bash build-electron.sh",
     "build:all": "npm run build:electron && npm run build:package",
     "build:docker:rpi": "docker buildx build --platform linux/arm/v7 -t skunk1/king-bot-api:rpi -f rpi.Dockerfile . --load",
-    "build:docker:latest": "docker build -t skunk1/king-bot-api:latest -f Dockerfile .",
+    "build:docker:latest": "node scripts/docker-build-latest.js",
     "build:docker": "npm run build:docker:latest && npm run build:docker:rpi",
     "push:docker:rpi": "docker push skunk1/king-bot-api:rpi",
-    "push:docker:latest": "docker push skunk1/king-bot-api:latest",
+    "push:docker:latest": "node scripts/docker-push-latest.js",
     "push:docker": "npm run build:docker && npm run push:docker:rpi && npm run push:docker:latest",
     "prestart:electron": "powershell -ExecutionPolicy Bypass -NoProfile -File ./rebuild-electron.ps1",
     "start:electron": "electron ."
