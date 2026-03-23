@@ -140,7 +140,7 @@ class map_scanner {
 	): Promise<Imap_region_tile[]> {
 		this.clear();
 		this.reset_world_villages();
-		logger.debug(`starting world scan radius ${world_radius}`, 'map_scanner');
+		logger.info(`starting world scan radius ${world_radius}`, 'map_scanner');
 		this.load_map_data_if_needed(world_radius);
 		this.reset_map_data_hovered();
 		const seed_requested = Boolean(options.seed);
@@ -190,7 +190,7 @@ class map_scanner {
 					break;
 				}
 			}
-			logger.debug(`world scan complete (${collected_tiles.length} tiles, ${this.world_village_index.size} villages)`, 'map_scanner');
+			logger.info(`world scan complete (${collected_tiles.length} tiles, ${this.world_village_index.size} villages)`, 'map_scanner');
 			seed_completed = true;
 			return collect_tiles ? collected_tiles : [];
 		} finally {

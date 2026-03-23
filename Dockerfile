@@ -7,7 +7,16 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ca-certificates \
-    ttf-freefont
+    ttf-freefont \
+    udev \
+    dbus \
+    font-noto \
+    python3 \
+    py3-pip \
+    build-base
+
+# upgrade python tooling so node-gyp can build better-sqlite3
+RUN python3 -m pip install --break-system-packages --upgrade pip setuptools
 
 # Tell Puppeteer to use installed Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \

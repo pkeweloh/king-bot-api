@@ -1,31 +1,53 @@
+const appDataDir = require('path').join(require('os').homedir(), 'AppData', 'Roaming', 'king-bot-api');
+process.env.PUPPETEER_CACHE_DIR = appDataDir;
+process.env.PUPPETEER_SKIP_DOWNLOAD = 'false';
+delete process.env.PUPPETEER_EXECUTABLE_PATH;
+
 const path = require('path');
+const fs = require('fs');
+
+function ensureCacheDir() {
+	try {
+		if (!fs.existsSync(appDataDir)) {
+			fs.mkdirSync(appDataDir, { recursive: true });
+		}
+	} catch (error) {
+		console.warn('Cache directory creation failed:', error?.message || String(error));
+	}
+}
+
+async function prepareElectronChrome() {
+	ensureCacheDir();
+	const chromePath = path.join(appDataDir, 'chrome', 'win64-121.0.6167.85', 'chrome.exe');
+	if (!fs.existsSync(chromePath)) {
+		try {
+			const { install } = require('@puppeteer/browsers');
+			const downloadPromise = install({
+				browser: 'chrome',
+				buildId: '121.0.6167.85',
+				cacheDir: appDataDir
+			});
+			const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Chrome download timeout')), 300000));
+			await Promise.race([downloadPromise, timeout]);
+		} catch (downloadError) {
+			console.warn('Electron Chrome download failed:', downloadError?.message || String(downloadError));
+		}
+	}
+	if (fs.existsSync(chromePath)) {
+		process.env.PUPPETEER_EXECUTABLE_PATH = chromePath;
+	} else {
+		console.warn(`Electron Chrome executable not found at ${chromePath}`);
+	}
+}
+
+const electronChromeReady = prepareElectronChrome();
+
 const express = require('express');
 
 // http://electron.atom.io/docs/api
 const { app, BrowserWindow, Tray, Menu } = require('electron');
-
-const ensurePuppeteerExecutableIsPackaged = () => {
-	if (process.env.PUPPETEER_EXECUTABLE_PATH) return;
-	try {
-		const puppeteer = require('puppeteer');
-		let executablePath = puppeteer.executablePath();
-		if (!executablePath) return;
-		const packagedSegment = `${path.sep}app.asar${path.sep}`;
-		if (executablePath.includes(packagedSegment)) {
-			executablePath = executablePath.replace(packagedSegment, `${path.sep}app.asar.unpacked${path.sep}`);
-		} else if (executablePath.includes('app.asar')) {
-			executablePath = executablePath.replace('app.asar', 'app.asar.unpacked');
-		}
-		process.env.PUPPETEER_EXECUTABLE_PATH = executablePath;
-	} catch (error) {
-		console.warn('Could not initialize Puppeteer executable path:', error?.message ?? error);
-	}
-};
-
-ensurePuppeteerExecutableIsPackaged();
-
-const kingbot = require('./dist').default;
 const settings = require('./dist/settings').default;
+const kingbot = require('./dist/index').default;
 
 let server = express();
 let port = 3001;
@@ -53,15 +75,20 @@ server.use(express.json());
 
 server.use(express.static(path.resolve(__dirname, './electron-dist')));
 
-server.post('/api/login', (req, res) => {
+server.post('/api/login', async (req, res) => {
 	const { gameworld, email, password, sitter_type, sitter_name } = req.body;
 
-	running_server.close();
+	try {
+		await electronChromeReady;
+		running_server.close();
 
-	settings.write_credentials(gameworld, email, password, sitter_type, sitter_name);
-	kingbot.start_server().then(() => {
+		settings.write_credentials(gameworld, email, password, sitter_type, sitter_name);
+		await kingbot.start_server();
 		window.loadURL('http://localhost:3000');
-	});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		return res.status(500).json({ error: error?.message || String(error) });
+	}
 });
 
 server.get('/api/settings', (req, res) => {
@@ -73,11 +100,16 @@ server.get('/api/settings', (req, res) => {
 	} : null);
 });
 
-server.get('/api/start', (req, res) => {
-	running_server.close();
-	kingbot.start_server().then(() => {
+server.get('/api/start', async (req, res) => {
+	try {
+		await electronChromeReady;
+		running_server.close();
+		await kingbot.start_server();
 		window.loadURL('http://localhost:3000');
-	});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		return res.status(500).json({ error: error?.message || String(error) });
+	}
 });
 
 server.get('*', (req, res) => {
