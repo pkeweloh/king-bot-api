@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import createHttpsProxy from 'https-proxy-agent';
 import { clash_obj, get_ms, camelcase_to_string, get_random_string } from './util';
 import manage_login from './login';
@@ -141,15 +141,23 @@ class api {
 	}
 
 	async create_gameworld_session(gameworld: string, token: string, msid: string, redirectUrl: string): Promise<{ session: string, cookies: string }> {
-		// establish session via redirect URL
-		await this.axios.get(redirectUrl);
-
 		// log into the game API
 		const worldURL = `https://${gameworld.toLowerCase()}.kingdoms.com/api/login.php?token=${token}&msid=${msid}&msname=msid`;
-		const res = await this.axios.get(worldURL, {
+		const normalizedRedirectUrl = redirectUrl ? redirectUrl.toLowerCase() : '';
+		const normalizedWorldUrl = worldURL.toLowerCase();
+		let res: AxiosResponse;
+
+		const requestConfig: AxiosRequestConfig = {
 			maxRedirects: 0,
 			validateStatus: (status) => status >= 200 && status < 303,
-		});
+		};
+
+		if (normalizedRedirectUrl === normalizedWorldUrl) {
+			res = await this.axios.get(redirectUrl, requestConfig);
+		} else {
+			await this.axios.get(redirectUrl);
+			res = await this.axios.get(worldURL, requestConfig);
+		}
 
 		// get gameworld cookies
 		const cookies = this.parse_cookies_local(res.headers['set-cookie']);

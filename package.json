@@ -1,6 +1,6 @@
 {
   "name": "king-bot-api",
-  "version": "1.3.9",
+  "version": "1.3.10",
   "description": "Advanced Bot for Travian Kingdoms",
   "main": "main-electron.js",
   "scripts": {
