@@ -112,6 +112,36 @@ the docker script will prompt you for a container name, what port you want the b
 
 visit `http://localhost:3000` (or whatever port you chose) to see the results.
 
+### docker desktop
+
+when creating the container manually in docker desktop, you need to configure two things:
+
+**port** – map a host port to the container port `3000`:
+
+```
+Host port: 3000  →  Container port: 3000
+```
+
+**volume** – map a local folder to `/usr/kingbot/assets` inside the container. this folder holds `cred.txt` and the sqlite database. if these files already exist they will be reused on restart, so your session and data persist across container recreations:
+
+```
+/path/to/your/databases/my-gameworld  →  /usr/kingbot/assets
+```
+
+example on Windows:
+
+```
+C:\Users\YourUser\travian\databases\com1-myworld  →  /usr/kingbot/assets
+```
+
+example on Linux/macOS:
+
+```
+/home/youruser/travian/databases/com1-myworld  →  /usr/kingbot/assets
+```
+
+create a separate folder per gameworld account so each one keeps its own credentials and database.
+
 both docker images (`Dockerfile` and `rpi.Dockerfile`) install `python3`, `py3-pip`, and `build-base`, then upgrade `pip`/`setuptools` (with `--break-system-packages`) before running `npm install` so `node-gyp` finds a `distutils` provider during the native rebuild.
 
 # electron
