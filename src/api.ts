@@ -208,8 +208,8 @@ class api {
 	async get_browser_cache(params: string[]): Promise<any[]> {
 		const browser_data = await BrowserService.getCache(params);
 		if (browser_data && browser_data.length === params.length) {
-			// sync browser data to local cache
-			cache.sync_payload(browser_data);
+			// sync browser data to local cache, but don't overwrite recent API responses (60s window)
+			cache.sync_payload(browser_data, 60_000);
 			return this.merge_data({ cache: browser_data });
 		}
 		return null;
@@ -223,20 +223,27 @@ class api {
 		return null;
 	}
 
-	async get_cache(params: string[], options?: { force?: boolean; skip_refresh?: boolean; local_cache?: boolean }): Promise<any[]> {
+	async get_cache(params: string[], options?: { force?: boolean; skip_refresh?: boolean; local_cache?: boolean; prefer_local?: boolean }): Promise<any[]> {
 		const {
 			force = false,
 			skip_refresh = false,
-			local_cache = false
+			local_cache = false,
+			prefer_local = false
 		} = options ?? {};
 		if (!force) {
+			// prefer local cache (fresh API responses) before browser cache
+			if (prefer_local) {
+				const local = this.get_local_cache(params);
+				if (local !== null) return local;
+			}
+
 			// browser cache
 			const browser_data = await this.get_browser_cache(params);
 			if (browser_data !== null) {
 				return browser_data;
 			}
 
-			// local cache
+			// local cache fallback
 			if (local_cache) {
 				const local = this.get_local_cache(params);
 				if (local !== null) {

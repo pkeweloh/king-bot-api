@@ -134,11 +134,22 @@ class queue extends feature_item {
 			village.building_collection_ident + village_id,
 			village.building_queue_ident + village_id
 		];
-		const response: any[] = await api.get_cache(params);
-		const queue_data: Ibuilding_queue = find_state_data(village.building_queue_ident + village_id, response);
+		const response: any[] = await api.get_cache(params, { prefer_local: true });
+		let queue_data: Ibuilding_queue = find_state_data(village.building_queue_ident + village_id, response);
 		if (queue_data == null) {
 			logger.error(`could not get building queue data on village ${village_name}`, this.params.name);
 			return 60; // sleep 1 minute
+		}
+
+		// detect impossible state: both slots show busy but building should have already finished
+		if (queue_data.freeSlots[queue_type] == 0 && queue_data.freeSlots[4] == 0) {
+			const stale_finished: number = queue_data.queues[2]?.[0]?.finished ?? queue_data.queues[1]?.[0]?.finished;
+			if (stale_finished && get_diff_time(stale_finished) < 0) {
+				logger.debug(`stale cache detected for BuildingQueue:${village_id} — building finished but slot still shows busy, fetching fresh data`, this.params.name);
+				const fresh_response = await api.get_cache(params, { force: true });
+				const fresh_queue: Ibuilding_queue = find_state_data(village.building_queue_ident + village_id, fresh_response);
+				if (fresh_queue) queue_data = fresh_queue;
+			}
 		}
 
 		const free: boolean = queue_data.freeSlots[queue_type] == 1;

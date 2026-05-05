@@ -122,31 +122,32 @@ class CacheService {
 		`);
 	}
 
-	public sync_payload(payload: any) {
+	// min_age_ms: skip overwrite if existing entry was updated within this window (0 = always overwrite)
+	public sync_payload(payload: any, min_age_ms: number = 0) {
 		if (!this.db || !payload) return;
 
 		try {
 			const items = Array.isArray(payload) ? payload : [payload];
 
 			for (const item of items) {
-				this.process_item(item);
+				this.process_item(item, min_age_ms);
 			}
 		} catch (error: any) {
 			logger.error(`error synchronizing payload: ${error.message}`, 'cache');
 		}
 	}
 
-	private process_item(item: any) {
+	private process_item(item: any, min_age_ms: number = 0) {
 		if (!item || !item.name) return;
 
-		this.upsert_generic(item.name, item.data);
+		this.upsert_generic(item.name, item.data, min_age_ms);
 
 		if (item.name.startsWith('Player:')) {
 			this.upsert_player(item.data);
 		} else if (item.name.startsWith('Village:')) {
 			this.upsert_village(item.data);
 		} else if (item.name.startsWith('Collection:') && item.data?.cache) {
-			this.sync_payload(item.data.cache);
+			this.sync_payload(item.data.cache, min_age_ms);
 		}
 	}
 
@@ -176,8 +177,13 @@ class CacheService {
 		return results;
 	}
 
-	private upsert_generic(key: string, data: any) {
+	private upsert_generic(key: string, data: any, min_age_ms: number = 0) {
 		if (!this.db || !key || !data) return;
+
+		if (min_age_ms > 0) {
+			const existing = this.db.prepare('SELECT updatedAt FROM Cache WHERE key = ?').get(key) as { updatedAt: number } | undefined;
+			if (existing && (Date.now() - existing.updatedAt) < min_age_ms) return;
+		}
 
 		const stmt = this.db.prepare(`
 			INSERT INTO Cache (key, value, updatedAt)
