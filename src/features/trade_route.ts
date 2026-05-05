@@ -158,13 +158,11 @@ class trade_feature extends feature_item {
 			return null;
 		}
 
-		if (destination_village_own) await this.trade_own_route();
-		else await this.trade_external_route();
-
-		return get_random_int(interval_min, interval_max);
+		if (destination_village_own) return await this.trade_own_route();
+		return await this.trade_external_route();
 	}
 
-	async trade_own_route(): Promise<void> {
+	async trade_own_route(): Promise<number> {
 		const {
 			source_village_name, destination_village_name,
 			source_village_id, destination_village_id,
@@ -184,8 +182,7 @@ class trade_feature extends feature_item {
 				`trade ${source_village_name} -> ${destination_village_name} failed ` +
 				`because couldn't find source village width id ${source_village_id}`,
 				this.params.name);
-			await sleep(get_random_int(300, 600));
-			return;
+			return get_random_int(300, 600);
 		}
 		const destination_village: Ivillage = village.find(destination_village_id, villages_data);
 		if (!destination_village) {
@@ -193,8 +190,7 @@ class trade_feature extends feature_item {
 				`trade ${source_village_name} -> ${destination_village_name} failed ` +
 				`because couldn't find destination village width id ${destination_village_id}`,
 				this.params.name);
-			await sleep(get_random_int(300, 600));
-			return;
+			return get_random_int(300, 600);
 		}
 
 		var resources: Iresources = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -206,8 +202,7 @@ class trade_feature extends feature_item {
 		// check if there are enough merchants
 		if (!await this.enough_merchants(resources)) {
 			logger.warn(`not enough merchants for trade ${source_village_name} -> ${destination_village_name}`, this.params.name);
-			await sleep(get_random_int(300, 600));
-			return;
+			return get_random_int(300, 600);
 		}
 
 		// check if source village has more and destination has less than desired
@@ -227,10 +222,10 @@ class trade_feature extends feature_item {
 			logger.info(`trade [wood: ${resources[1]}, clay: ${resources[2]}, iron: ${resources[3]}, crop: ${resources[4]}] ` +
 				`sent from ${source_village_name} to ${destination_village_name}`, this.params.name);
 		}
-		await sleep(get_random_int(interval_min, interval_max));
+		return get_random_int(interval_min, interval_max);
 	}
 
-	async trade_external_route(): Promise<void> {
+	async trade_external_route(): Promise<number> {
 		const {
 			source_village_name, destination_village_name,
 			source_village_id, destination_village_id,
@@ -248,8 +243,7 @@ class trade_feature extends feature_item {
 				`trade ${source_village_name} -> ${destination_village_name} failed ` +
 				`because couldn't find source village width id ${source_village_id}`,
 				this.params.name);
-			await sleep(get_random_int(300, 600));
-			return;
+			return get_random_int(300, 600);
 		}
 
 		var resources: Iresources = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -261,8 +255,7 @@ class trade_feature extends feature_item {
 		// check if there are enough merchants
 		if (await this.enough_merchants(resources)) {
 			logger.warn(`not enough merchants for trade ${source_village_name} -> ${destination_village_name}`, this.params.name);
-			await sleep(get_random_int(300, 600));
-			return;
+			return get_random_int(300, 600);
 		}
 
 		// check if source village has more than desired
@@ -282,7 +275,7 @@ class trade_feature extends feature_item {
 			logger.info(`trade [wood: ${resources[1]}, clay: ${resources[2]}, iron: ${resources[3]}, crop: ${resources[4]}] ` +
 				`sent from ${source_village_name} to ${destination_village_name}`, this.params.name);
 		}
-		await sleep(get_random_int(interval_min, interval_max));
+		return get_random_int(interval_min, interval_max);
 	}
 }
 
