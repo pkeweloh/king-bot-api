@@ -190,6 +190,8 @@ class timed_send_feature extends feature_item {
 		return 'timed_send';
 	}
 
+	get_priority(): number { return 0; }
+
 	async run(): Promise<number | null> {
 		logger.info(`uuid: ${this.options.uuid} started`, this.params.name);
 

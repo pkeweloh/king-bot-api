@@ -66,6 +66,8 @@ export abstract class feature_single implements feature {
 		return null;
 	}
 
+	get_priority(): number { return 1; }
+
 	get_ident(): string {
 		return this.params.ident;
 	}
@@ -99,6 +101,7 @@ export abstract class feature_single implements feature {
 			id: this.params.ident,
 			name: this.params.name,
 			nextRun: get_date(),
+			priority: this.get_priority(),
 			run: async () => {
 				if (!this.get_options().run) {
 					this.running = false;
@@ -338,6 +341,8 @@ export abstract class feature_item {
 		return null;
 	}
 
+	get_priority(): number { return 1; }
+
 	get_feature_params(): Ifeature_params {
 		return {
 			...this.params,
@@ -376,6 +381,7 @@ export abstract class feature_item {
 			id: this.get_options().uuid,
 			name: this.params.name,
 			nextRun: get_date(),
+			priority: this.get_priority(),
 			run: async () => {
 				if (!this.get_options().run) {
 					this.running = false;
@@ -396,4 +402,3 @@ export abstract class feature_item {
 		logger.info('task started', task.name);
 	}
 }
-
