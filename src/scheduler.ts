@@ -44,6 +44,17 @@ class SchedulerService {
 		}
 	}
 
+	public reschedule(taskId: string, seconds: number = 0): void {
+		const task = this.tasks.get(taskId);
+		if (task) {
+			const proposed = Math.floor(Date.now() / 1000) + seconds;
+			if (proposed < task.nextRun) {
+				task.nextRun = proposed;
+				logger.debug(`task [${task.name}] rescheduled to run in ${seconds}s`, 'scheduler');
+			}
+		}
+	}
+
 	private launch_fire_and_forget(task: Itask): void {
 		this.running_tasks.add(task.id);
 		logger.debug(`executing task [${task.name}]`, 'scheduler');
