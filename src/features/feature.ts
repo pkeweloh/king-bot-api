@@ -82,7 +82,7 @@ export abstract class feature_single implements feature {
 	}
 
 	start_for_server(): void {
-		if (this.get_options().run) this.start();
+		if (this.get_options().run) this.start(true);
 	}
 
 	stop(): void {
@@ -91,7 +91,7 @@ export abstract class feature_single implements feature {
 		this.save();
 	}
 
-	async start(): Promise<void> {
+	async start(stagger: boolean = false): Promise<void> {
 		this.set_options({ ...this.get_options(), run: true });
 		this.save();
 
@@ -119,6 +119,7 @@ export abstract class feature_single implements feature {
 		};
 
 		scheduler.schedule_task(task);
+		if (!stagger) scheduler.reschedule(task.id);
 		logger.info('task started', task.name);
 	}
 
@@ -212,7 +213,7 @@ export abstract class feature_collection implements feature {
 	start_for_server(): void {
 		for (let feat of this.features)
 			if (feat.get_options().run)
-				feat.start();
+				feat.start(true);
 	}
 
 	handle_request(payload: Irequest): Iresponse {
@@ -343,6 +344,8 @@ export abstract class feature_item {
 
 	get_priority(): number { return 1; }
 
+	get_task_name(): string { return this.params.name; }
+
 	get_feature_params(): Ifeature_params {
 		return {
 			...this.params,
@@ -372,14 +375,14 @@ export abstract class feature_item {
 		database.set(`${this.params.ident}.options`, options).write();
 	}
 
-	async start(): Promise<void> {
+	async start(stagger: boolean = false): Promise<void> {
 		this.set_options({ ...this.get_options(), run: true });
 		this.running = true;
 		this.save();
 
 		const task: Itask = {
 			id: this.get_options().uuid,
-			name: this.params.name,
+			name: this.get_task_name(),
 			nextRun: get_date(),
 			priority: this.get_priority(),
 			run: async () => {
@@ -399,6 +402,7 @@ export abstract class feature_item {
 		};
 
 		scheduler.schedule_task(task);
+		if (!stagger) scheduler.reschedule(task.id);
 		logger.info('task started', task.name);
 	}
 }
