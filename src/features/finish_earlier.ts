@@ -6,6 +6,9 @@ import { building_types } from '../data';
 import api from '../api';
 import logger from '../logger';
 import uniqid from 'uniqid';
+import scheduler from '../scheduler';
+import raise_fields from './raise_fields';
+import building_queue from './building_queue';
 
 class finish_earlier extends feature_single {
 
@@ -103,8 +106,18 @@ class finish_earlier extends feature_single {
 
 				// finish building instant
 				if (rest_time < five_minutes && canUseInstant) {
-					await api.finish_now(village_obj.villageId, queue_type);
-					logger.info(`finished ${building_type} earlier for free on village ${village_obj.name}`, this.params.name);
+					const res: any = await api.finish_now(village_obj.villageId, queue_type);
+					if (res.data === false) {
+						logger.warn(`instant finish on village ${village_obj.name} was rejected`, this.params.name);
+					} else {
+						logger.info(`finished ${building_type} earlier for free on village ${village_obj.name}`, this.params.name);
+						if (queue_type === 2) {
+							const rf = raise_fields.features.find(f => (f.get_options() as any).village_id === village_obj.villageId);
+							if (rf) scheduler.reschedule(rf.get_options().uuid);
+						}
+						const bq = building_queue.features.find(f => (f.get_options() as any).village_id === village_obj.villageId);
+						if (bq) scheduler.reschedule(bq.get_options().uuid);
+					}
 					continue;
 				}
 

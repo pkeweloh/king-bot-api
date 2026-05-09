@@ -5,6 +5,7 @@ import { Ivillage, Ibuilding, Ibuilding_queue, Ibuilding_collection, Iresources 
 import { building_types } from '../data';
 import api from '../api';
 import logger from '../logger';
+import scheduler from '../scheduler';
 import finish_earlier from './finish_earlier';
 
 interface Ioptions_queue extends Ioptions {
@@ -62,6 +63,11 @@ class queue extends feature_item {
 			ident: 'queue',
 			name: 'building queue'
 		};
+	}
+
+	get_task_name(): string {
+		const name = (this.options as any)?.village_name;
+		return name ? `${this.params.name}][${name}` : this.params.name;
 	}
 
 	get_description(): string {
@@ -145,7 +151,7 @@ class queue extends feature_item {
 		if (queue_data.freeSlots[queue_type] == 0 && queue_data.freeSlots[4] == 0) {
 			const stale_finished: number = queue_data.queues[2]?.[0]?.finished ?? queue_data.queues[1]?.[0]?.finished;
 			if (stale_finished && get_diff_time(stale_finished) < 0) {
-				logger.debug(`stale cache detected for BuildingQueue:${village_id} — building finished but slot still shows busy, fetching fresh data`, this.params.name);
+				logger.debug(`stale cache detected for BuildingQueue:${village_id} on village ${village_name}, building finished but slot still shows busy, fetching fresh data`, this.params.name);
 				const fresh_response = await api.get_cache(params, { force: true });
 				const fresh_queue: Ibuilding_queue = find_state_data(village.building_queue_ident + village_id, fresh_response);
 				if (fresh_queue) queue_data = fresh_queue;
@@ -153,7 +159,7 @@ class queue extends feature_item {
 		}
 
 		const free: boolean = queue_data.freeSlots[queue_type] == 1;
-		const queue_free: boolean = queue_data.freeSlots[4] == 1;
+		const queue_free: boolean = queue_data.freeSlots[4] > 0;
 		const canUseInstant: boolean =
 			queue_data.canUseInstantConstruction || queue_data.canUseInstantConstructionOnlyInVillage;
 
@@ -217,9 +223,8 @@ class queue extends feature_item {
 		// upgrade building using free slot
 		if (free) {
 			const res: any = await api.upgrade_building(queue_item.type, queue_item.location, village_id);
-			if (res.errors) {
-				for (let error of res.errors)
-					logger.error(`upgrade building ${building_type} on village ${village_name} failed: ${error.message}`, this.params.name);
+			if (!res || (Array.isArray(res) && res.length === 0) || res.errors) {
+				logger.error(`upgrade building ${building_type} on village ${village_name} failed${res?.errors?.[0] ? `: ${res.errors[0].message}` : ''}`, this.params.name);
 
 				// check again later if it might be possible
 				return 60;
@@ -232,6 +237,9 @@ class queue extends feature_item {
 			this.save();
 
 			const upgrade_time: number = Number(building.upgradeTime);
+			if (finish_earlier.running && upgrade_time > 0)
+				scheduler.reschedule('finish_earlier', Math.max(upgrade_time - five_minutes, 1));
+
 			// check if building time is less than 5 min
 			if (upgrade_time < five_minutes && finish_earlier.running && canUseInstant) {
 				const res: any = await api.finish_now(village_id, queue_type);
@@ -261,17 +269,19 @@ class queue extends feature_item {
 		// upgrade building using queue slot
 		else if (queue_free) {
 			const res: any = await api.queue_building(queue_item.type, queue_item.location, village_id, true);
-			if (res.errors) {
-				for (let error of res.errors)
-					logger.error(`upgrade building ${building_type} on village ${village_name} failed: ${error.message}`, this.params.name);
+			if (!res || (Array.isArray(res) && res.length === 0) || res.errors) {
+				logger.error(`queue building ${building_type} on village ${village_name} failed${res?.errors?.[0] ? `: ${res.errors[0].message}` : ''}`, this.params.name);
 
 				// check again later if it might be possible
 				return 60;
-			} else {
-				logger.info(`queue building ${building_type} on village ${village_name}`, this.params.name);
-				// delete queue item
-				this.options.queue.shift();
 			}
+			logger.info(`queue building ${building_type} on village ${village_name}`, this.params.name);
+			// delete queue item
+			this.options.queue.shift();
+			const queue_upgrade_time: number = Number(building.upgradeTime);
+			if (finish_earlier.running && queue_upgrade_time >= five_minutes)
+				scheduler.reschedule('finish_earlier', queue_upgrade_time - five_minutes);
+			return 1;
 		}
 
 		if (!sleep_time || sleep_time <= 0)

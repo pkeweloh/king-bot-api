@@ -1,4 +1,5 @@
 import { feature_collection, feature_item, Ioptions } from './feature';
+import scheduler from '../scheduler';
 import { find_state_data, sleep, get_diff_time } from '../util';
 import { village } from '../gamedata';
 import { Ivillage, Ibuilding, Ibuilding_queue, Ibuilding_collection, Iresources } from '../interfaces';
@@ -83,6 +84,11 @@ class raise extends feature_item {
 		};
 	}
 
+	get_task_name(): string {
+		const name = (this.options as any)?.village_name;
+		return name ? `${this.params.name}][${name}` : this.params.name;
+	}
+
 	get_description(): string {
 		const { village_name } = this.options;
 
@@ -149,7 +155,7 @@ class raise extends feature_item {
 		if (queue_data.freeSlots[2] == 0) {
 			const stale_finished: number = queue_data.queues[2]?.[0]?.finished ?? queue_data.queues[1]?.[0]?.finished;
 			if (stale_finished && get_diff_time(stale_finished) < 0) {
-				logger.debug(`stale cache detected for BuildingQueue:${village_id} — building finished but slot still shows busy, fetching fresh data`, this.params.name);
+				logger.debug(`stale cache detected for BuildingQueue:${village_id} on village ${village_name}, building finished but slot still shows busy, fetching fresh data`, this.params.name);
 				const fresh_response = await api.get_cache(params, { force: true });
 				const fresh_queue: Ibuilding_queue = find_state_data(village.building_queue_ident + village_id, fresh_response);
 				if (fresh_queue) queue_data = fresh_queue;
@@ -158,9 +164,13 @@ class raise extends feature_item {
 
 		let sleep_time: number = null;
 		const five_minutes: number = 5 * 60;
+		const free: boolean = queue_data.freeSlots[2] == 1;
+		const queue_free: boolean = queue_data.freeSlots[4] > 0;
+		const canUseInstant: boolean =
+			queue_data.canUseInstantConstruction || queue_data.canUseInstantConstructionOnlyInVillage;
 
-		// skip if resource slot is used
-		if (queue_data.freeSlots[2] == 0) {
+		// skip if both slots are used
+		if (!free && !queue_free) {
 			// get queue finish time
 			let finished: number = null;
 			if (queue_data.queues[2].length) {
@@ -253,38 +263,51 @@ class raise extends feature_item {
 			const building_type = building_types[upgrade_building.buildingType];
 
 			// upgrade field
-			const res: any = await api.upgrade_building(upgrade_building.buildingType, upgrade_building.locationId, village_id);
-			if (res.errors) {
-				for (let error of res.errors)
-					logger.error(`upgrade field ${building_type} on village ${village_name} failed: ${error.message}`, this.params.name);
-
-				// check again later if it might be possible
-				return 60;
-			}
-
-			logger.info(`upgrade field ${building_type} on village ${village_name}`, this.params.name);
-
-			const upgrade_time: number = Number(upgrade_building.upgradeTime);
-			// check if building time is less than 5 min
-			if (upgrade_time < five_minutes && finish_earlier.running) {
-				const res: any = await api.finish_now(village_id, 2);
-				if (res.data === false) {
-					logger.error(`instant finish on village ${village_name} failed`, this.params.name);
-
+			if (free) {
+				const res: any = await api.upgrade_building(upgrade_building.buildingType, upgrade_building.locationId, village_id);
+				if (!res || (Array.isArray(res) && res.length === 0) || res.errors) {
+					logger.error(`upgrade field ${building_type} on village ${village_name} failed${res?.errors?.[0] ? `: ${res.errors[0].message}` : ''}`, this.params.name);
 					// check again later if it might be possible
 					return 60;
 				}
-				logger.info(`upgrade time less 5 min for field ${building_type} on village ${village_name}, instant finish!`, this.params.name);
 
-				// only wait one second to build next field
+				logger.info(`upgrade field ${building_type} on village ${village_name}`, this.params.name);
+
+				const upgrade_time: number = Number(upgrade_building.upgradeTime);
+				if (finish_earlier.running && upgrade_time > 0)
+					scheduler.reschedule('finish_earlier', Math.max(upgrade_time - five_minutes, 1));
+
+				// check if building time is less than 5 min
+				if (upgrade_time < five_minutes && finish_earlier.running && canUseInstant) {
+					const res: any = await api.finish_now(village_id, 2);
+					if (res.data === false) {
+						logger.error(`instant finish on village ${village_name} failed`, this.params.name);
+						// check again later if it might be possible
+						return 60;
+					}
+					logger.info(`upgrade time less 5 min for field ${building_type} on village ${village_name}, instant finish!`, this.params.name);
+					return 1;
+				} else if (queue_free) {
+					// only wait one second to build next field
+					return 1;
+				}
+
+				if (!sleep_time || upgrade_time < sleep_time) {
+					sleep_time = upgrade_time;
+					if (sleep_time > five_minutes)
+						sleep_time -= five_minutes;
+				}
+			} else if (queue_free) {
+				const res: any = await api.queue_building(upgrade_building.buildingType, upgrade_building.locationId, village_id, true);
+				if (!res || (Array.isArray(res) && res.length === 0) || res.errors) {
+					logger.error(`queue field ${building_type} on village ${village_name} failed${res?.errors?.[0] ? `: ${res.errors[0].message}` : ''}`, this.params.name);
+					return 60;
+				}
+				logger.info(`queue field ${building_type} on village ${village_name}`, this.params.name);
+				const queue_upgrade_time: number = Number(upgrade_building.upgradeTime);
+				if (finish_earlier.running && queue_upgrade_time >= five_minutes)
+					scheduler.reschedule('finish_earlier', queue_upgrade_time - five_minutes);
 				return 1;
-			}
-
-			// set sleep time
-			if (!sleep_time || upgrade_time < sleep_time) {
-				sleep_time = upgrade_time;
-				if (sleep_time > five_minutes)
-					sleep_time -= five_minutes;
 			}
 		}
 
