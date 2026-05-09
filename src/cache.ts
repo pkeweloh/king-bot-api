@@ -140,14 +140,30 @@ class CacheService {
 	private process_item(item: any, min_age_ms: number = 0) {
 		if (!item || !item.name) return;
 
-		this.upsert_generic(item.name, item.data, min_age_ms);
-
-		if (item.name.startsWith('Player:')) {
-			this.upsert_player(item.data);
-		} else if (item.name.startsWith('Village:')) {
-			this.upsert_village(item.data);
-		} else if (item.name.startsWith('Collection:') && item.data?.cache) {
+		if (item.name.startsWith('Collection:') && item.data?.cache) {
+			const existing = this.db?.prepare('SELECT value FROM Cache WHERE key = ?').get(item.name) as { value: string } | undefined;
+			if (!existing) {
+				this.upsert_generic(item.name, item.data, min_age_ms);
+			} else {
+				const existing_data = JSON.parse(existing.value);
+				const existing_cache: any[] = existing_data?.cache ?? [];
+				if (item.data.cache.length >= existing_cache.length) {
+					this.upsert_generic(item.name, item.data, min_age_ms);
+				} else {
+					// Partial update, merge new items into existing collection
+					const map = new Map(existing_cache.map((b: any) => [b.name, b]));
+					for (const b of item.data.cache) map.set(b.name, b);
+					this.upsert_generic(item.name, { ...existing_data, cache: Array.from(map.values()) }, min_age_ms);
+				}
+			}
 			this.sync_payload(item.data.cache, min_age_ms);
+		} else {
+			this.upsert_generic(item.name, item.data, min_age_ms);
+			if (item.name.startsWith('Player:')) {
+				this.upsert_player(item.data);
+			} else if (item.name.startsWith('Village:')) {
+				this.upsert_village(item.data);
+			}
 		}
 	}
 

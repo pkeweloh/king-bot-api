@@ -233,8 +233,20 @@ class api {
 		if (!force) {
 			// prefer local cache (fresh API responses) before browser cache
 			if (prefer_local) {
-				const local = this.get_local_cache(params);
-				if (local !== null) return local;
+				const local_items = cache.get(params);
+				if (local_items.length === params.length) {
+					return this.merge_data({ cache: local_items });
+				}
+				if (local_items.length > 0) {
+					// partial hit, fill missing keys from browser cache
+					const found = new Set(local_items.map((i: any) => i.name));
+					const missing = params.filter(p => !found.has(p));
+					const browser_items = await BrowserService.getCache(missing);
+					if (browser_items && browser_items.length === missing.length) {
+						cache.sync_payload(browser_items, 60_000);
+						return this.merge_data({ cache: [...local_items, ...browser_items] });
+					}
+				}
 			}
 
 			// browser cache
@@ -591,8 +603,11 @@ class api {
 
 	handle_errors: any = (data: any, group: string) => {
 		let errors = [];
-		if (data.response.errors) {
-			for (let error of data.response.errors) {
+		const response_errors = Array.isArray(data.response)
+			? data.response.find((r: any) => r.errors)?.errors
+			: data.response?.errors;
+		if (response_errors) {
+			for (let error of response_errors) {
 				if (error.message.split(' ').length == 1)
 					error.message = camelcase_to_string(error.message);
 				errors.push({
@@ -601,7 +616,11 @@ class api {
 					params: error.params
 				});
 			}
-			data.response.errors = errors;
+			if (Array.isArray(data.response)) {
+				data.errors = errors;
+			} else {
+				data.response.errors = errors;
+			}
 		}
 
 		if (data.error) {
