@@ -10,7 +10,7 @@ custom_main.js
 # Build & Release folders
 dist/
 build/
-king-bot-api-*
+out/
 KingBotApi.dmg
 *.zip
 
@@ -100,3 +100,10 @@ typings/
 
 # History extension folder for Visual Studio Code
 .history
+
+# Local build-toolchain paths for rebuild-electron.ps1
+.rebuild-electron.env
+
+# Python venv used only by node-gyp to build the native modules.
+# Recreate with: npm run setup:python
+.venv/

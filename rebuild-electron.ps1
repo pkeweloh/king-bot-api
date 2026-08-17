@@ -32,7 +32,7 @@ if (Test-Path $envFile) {
     }
 }
 
-$defaultPython = "C:\Program Files\Python37\python.exe"
+$defaultPython = Join-Path $scriptDir ".venv\Scripts\python.exe"
 $defaultVcVars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
 $defaultArch = "x64"
 
@@ -41,8 +41,11 @@ function Resolve-Value($paramValue, $envVarName, $envKey, $defaultValue) {
         return $paramValue
     }
 
-    if ($env:$envVarName) {
-        return $env:$envVarName
+    # `$env:$envVarName` is a parse error: the env: drive needs a literal name, so an
+    # indirect lookup has to go through the API.
+    $envVarValue = [Environment]::GetEnvironmentVariable($envVarName)
+    if ($envVarValue) {
+        return $envVarValue
     }
 
     if ($envSettings.ContainsKey($envKey) -and $envSettings[$envKey]) {
@@ -67,7 +70,17 @@ if (-not (Test-Path $VcVarsPath)) {
 }
 
 if (-not (Test-Path $PythonPath)) {
-    Write-Error "Python executable not found at '$PythonPath'. Please point to a Python 3.7 install."
+    Write-Error "Python executable not found at '$PythonPath'. Run 'npm run setup:python' to create the project venv, or override PYTHON_PATH."
+    return
+}
+
+# node-gyp's bundled gyp still does `from distutils.version import StrictVersion`, and
+# distutils was removed from the stdlib in Python 3.12. setuptools re-provides it, so the
+# interpreter is useless to node-gyp without it. Fail here with a clear message instead of
+# letting gyp die with a bare ModuleNotFoundError halfway through the build.
+& $PythonPath -c "import distutils.version" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "'$PythonPath' has no distutils (Python 3.12+ removed it). Run: & '$PythonPath' -m pip install setuptools"
     return
 }
 
@@ -76,3 +89,26 @@ $env:npm_config_python = $PythonPath
 $command = "`"$VcVarsPath`" $Architecture && npm run rebuild:electron"
 Write-Host "Running build environment: vcvarsall ($Architecture) + npm run rebuild:electron..."
 cmd /c $command
+$rebuildExit = $LASTEXITCODE
+
+# electron-rebuild has just replaced better_sqlite3.node with a build for Electron's ABI
+# (NODE_MODULE_VERSION 99 on Electron 16), but the marker that `rebuild:native` keeps still
+# claims the Node ABI. Left alone, the next `npm start` would compare marker == Node ABI,
+# decide nothing needs rebuilding, and load the Electron binary into Node -- which fails
+# with an ERR_DLOPEN_FAILED / NODE_MODULE_VERSION mismatch.
+#
+# Recording a non-numeric value is enough: it can never equal `process.versions.modules`,
+# so the Node side always rebuilds, and the file says what the binary actually is when you
+# are staring at it wondering. On failure the binary is in an unknown state, so drop the
+# marker entirely and let the next Node run rebuild from scratch.
+$marker = Join-Path $scriptDir "node_modules\.better-sqlite3-node-module-version"
+if (Test-Path (Split-Path -Parent $marker)) {
+    if ($rebuildExit -eq 0) {
+        Set-Content -Path $marker -Value "electron"
+    }
+    else {
+        Remove-Item $marker -ErrorAction SilentlyContinue
+    }
+}
+
+exit $rebuildExit

@@ -52,9 +52,9 @@ when downloading a new project version you have to `$ npm install && npm run bui
 # prerequisites
 
 - **node.js 20.x** – the host runtime target. The `prestart`, `predev` and `prewatch` hooks call `npm run rebuild:native` before each Node run so the native binary always matches Node's ABI.
-- **python 3.12** – required by `node-gyp` during `better-sqlite3` rebuilds. Run `python -m pip install --upgrade pip setuptools` with the interpreter you use for `npm run rebuild:native` so setuptools drops the backported `distutils` into `Lib/site-packages`. Lock that interpreter with `npm config set python "C:\\path\\to\\python.exe"` if needed.
+- **python 3.12** – required by `node-gyp` during `better-sqlite3` rebuilds. On Windows run `npm run setup:python` once: it creates a project-local `.venv` and installs `setuptools` into it, which is what re-provides the `distutils` module that node-gyp's bundled gyp imports and that Python 3.12 removed from the stdlib. `npm run rebuild:native` and `rebuild-electron.ps1` both pick that venv up automatically, so the build does not depend on which `python` happens to be first on `PATH`.
 - **visual studio 2022 build tools** – needed for native compilation. Use the fixed Microsoft download link at `https://aka.ms/vs/17/release/vs_buildtools.exe` to grab the VS 2022 Build Tools installer and include the C++ workload.
-- **electron 16.0.6** – the gui target that runs inside its own Node 16 environment (`npm run rebuild:electron`, `npm run start:electron`). `rebuild-electron.ps1` still ships defaults for python 3.7/build tools but supports overrides via `.rebuild-electron.env`.
+- **electron 16.0.6** – the gui target that runs inside its own Node 16 environment (`npm run rebuild:electron`, `npm run start:electron`). `rebuild-electron.ps1` defaults to the project `.venv` plus the vs 2022 build tools, and supports overrides via `.rebuild-electron.env`.
 
 # gui
 
@@ -142,13 +142,25 @@ example on Linux/macOS:
 
 create a separate folder per gameworld account so each one keeps its own credentials and database.
 
+**restart policy** – by default docker does not restart a container after a system reboot. to keep the bot running automatically after restarts, set the restart policy when creating the container:
+
+```console
+$ docker run -d --restart unless-stopped scriptworld/king-bot-api
+```
+
+if the container already exists without this flag, apply it without recreating:
+
+```console
+$ docker update --restart unless-stopped <container-name>
+```
+
 both docker images (`Dockerfile` and `rpi.Dockerfile`) install `python3`, `py3-pip`, and `build-base`, then upgrade `pip`/`setuptools` (with `--break-system-packages`) before running `npm install` so `node-gyp` finds a `distutils` provider during the native rebuild.
 
 # electron
 
 the electron ui runs inside node 16, so the helper `rebuild-electron.ps1` prepares the right toolchain before each gui start:
 
-- **python / vs defaults** – the script ships with python 3.7 + vs 2022 build tools paths and sets `npm_config_python`.
+- **python / vs defaults** – the script defaults to the project `.venv` (see `npm run setup:python`) plus the vs 2022 build tools paths, and sets `npm_config_python`. it refuses to start if the interpreter it resolves to has no `distutils`, rather than letting gyp fail mid-build.
 - **overrides** – copy `.rebuild-electron.env.example` to `.rebuild-electron.env` (or set `REBUILD_ELECTRON_PYTHON`, `REBUILD_ELECTRON_VCVARS`, `REBUILD_ELECTRON_ARCH`) when your tools live elsewhere.
 - **rebuild command** – it runs `electron-rebuild --version=16.0.6` so `better-sqlite3` compiles against Electron’s Node 16 (`NODE_MODULE_VERSION 99`).
 
